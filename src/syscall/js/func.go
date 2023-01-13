@@ -1,7 +1,7 @@
 // Copyright 2018 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
-
+// go:build 的使用
 //go:build js && wasm
 
 package js
@@ -20,10 +20,9 @@ type Func struct {
 	id    uint32
 }
 
-// FuncOf returns a function to be used by JavaScript.
+// FuncOf 返回一个可被JavaScript使用的函数
 //
-// The Go function fn is called with the value of JavaScript's "this" keyword and the
-// arguments of the invocation. The return value of the invocation is
+// Go函数fn的this参数是JavaScript的this关键字的值，args是调用时传入的参数. The return value of the invocation is
 // the result of the Go function mapped back to JavaScript according to ValueOf.
 //
 // Invoking the wrapped Go function from JavaScript will
@@ -59,7 +58,7 @@ func (c Func) Release() {
 	funcsMu.Unlock()
 }
 
-// setEventHandler is defined in the runtime package.
+// setEventHandler 在runtime包里定义实现
 func setEventHandler(fn func())
 
 func init() {
@@ -74,7 +73,7 @@ func handleEvent() {
 	jsGo.Set("_pendingEvent", Null())
 
 	id := uint32(cb.Get("id").Int())
-	if id == 0 { // zero indicates deadlock
+	if id == 0 { // 0表示死锁，一直阻塞在select
 		select {}
 	}
 	funcsMu.Lock()

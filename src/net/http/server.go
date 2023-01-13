@@ -33,7 +33,7 @@ import (
 	"golang.org/x/net/http/httpguts"
 )
 
-// Errors used by the HTTP server.
+// HTTP服务器使用的错误
 var (
 	// ErrBodyNotAllowed is returned by ResponseWriter.Write calls
 	// when the HTTP method or response code does not permit a
@@ -59,19 +59,15 @@ var (
 	ErrWriteAfterFlush = errors.New("unused")
 )
 
-// A Handler responds to an HTTP request.
+// Handler 处理并响应一个HTTP请求.
 //
-// ServeHTTP should write reply headers and data to the ResponseWriter
-// and then return. Returning signals that the request is finished; it
-// is not valid to use the ResponseWriter or read from the
-// Request.Body after or concurrently with the completion of the
-// ServeHTTP call.
+// ServeHTTP 应把响应头和数据写入到 ResponseWriter 然后返回
+// 并返回一个信号表示请求处理已完成，当在调用ServeHTTP或调用完毕后，
+// 使用 ResponseWriter 或 从Request.Body读取数据都是无效的
 //
-// Depending on the HTTP client software, HTTP protocol version, and
-// any intermediaries between the client and the Go server, it may not
-// be possible to read from the Request.Body after writing to the
-// ResponseWriter. Cautious handlers should read the Request.Body
-// first, and then reply.
+// 取决于 HTTP 客户端软件、HTTP 协议版本、以及任何客户端与Go服务器之间的代理
+// 在写入数据到ResponseWriter后，无法再从 Request.Body 读取数据
+// 注意 handlers 应先读取 Request.Body 里的数据后，再回复请求
 //
 // Except for reading the body, handlers should not modify the
 // provided Request.
@@ -2220,23 +2216,20 @@ func (rh *redirectHandler) ServeHTTP(w ResponseWriter, r *Request) {
 	Redirect(w, r, rh.url, rh.code)
 }
 
-// RedirectHandler returns a request handler that redirects
-// each request it receives to the given url using the given
-// status code.
+// RedirectHandler 返回redirectHandler，该handler使用指定状态码重定向请求
 //
 // The provided code should be in the 3xx range and is usually
 // StatusMovedPermanently, StatusFound or StatusSeeOther.
+// 返回重定向handler
 func RedirectHandler(url string, code int) Handler {
 	return &redirectHandler{url, code}
 }
 
-// ServeMux is an HTTP request multiplexer.
-// It matches the URL of each incoming request against a list of registered
-// patterns and calls the handler for the pattern that
-// most closely matches the URL.
+// ServeMux 是一个HTTP请求多路复用器（multiplexer）
+// 把每个进入的请求URL按照注册的路由列表进行匹配，匹配出最接近的路由后就调用对应handler进行处理
 //
-// Patterns name fixed, rooted paths, like "/favicon.ico",
-// or rooted subtrees, like "/images/" (note the trailing slash).
+// Patterns name fixed, 根路径如 "/favicon.ico",
+// 或 根子树如 "/images/" (注意后面的斜杠).
 // Longer patterns take precedence over shorter ones, so that
 // if there are handlers registered for both "/images/"
 // and "/images/thumbnails/", the latter handler will be
@@ -2397,33 +2390,32 @@ func (mux *ServeMux) shouldRedirectRLocked(host, path string) bool {
 // Handler returns a ``page not found'' handler and an empty pattern.
 func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string) {
 
-	// CONNECT requests are not canonicalized.
+	// CONNECT 请求是非标准method.
 	if r.Method == "CONNECT" {
 		// If r.URL.Path is /tree and its handler is not registered,
 		// the /tree -> /tree/ redirect applies to CONNECT requests
 		// but the path canonicalization does not.
 		if u, ok := mux.redirectToPathSlash(r.URL.Host, r.URL.Path, r.URL); ok {
-			return RedirectHandler(u.String(), StatusMovedPermanently), u.Path
+			return RedirectHandler(u.String(), StatusMovedPermanently), u.Path //返回重定向handler
 		}
 
 		return mux.handler(r.Host, r.URL.Path)
 	}
 
-	// All other requests have any port stripped and path cleaned
-	// before passing to mux.handler.
-	host := stripHostPort(r.Host)
-	path := cleanPath(r.URL.Path)
+	// 在传入mux.handler前，请求的端口和路径都需清掉
+	host := stripHostPort(r.Host) //提取出host
+	path := cleanPath(r.URL.Path) //提取出path
 
-	// If the given path is /tree and its handler is not registered,
-	// redirect for /tree/.
+	// 如果paht是 /tree 且没注册对应handler
+	// 重定向为 /tree/.
 	if u, ok := mux.redirectToPathSlash(host, path, r.URL); ok {
-		return RedirectHandler(u.String(), StatusMovedPermanently), u.Path
+		return RedirectHandler(u.String(), StatusMovedPermanently), u.Path //返回重定向handler
 	}
 
 	if path != r.URL.Path {
 		_, pattern = mux.handler(host, path)
 		u := &url.URL{Path: path, RawQuery: r.URL.RawQuery}
-		return RedirectHandler(u.String(), StatusMovedPermanently), pattern
+		return RedirectHandler(u.String(), StatusMovedPermanently), pattern //返回重定向handler
 	}
 
 	return mux.handler(host, r.URL.Path)
@@ -2448,8 +2440,7 @@ func (mux *ServeMux) handler(host, path string) (h Handler, pattern string) {
 	return
 }
 
-// ServeHTTP dispatches the request to the handler whose
-// pattern most closely matches the request URL.
+// ServeHTTP 把请求分派给路由最接近请求URL的handler
 func (mux *ServeMux) ServeHTTP(w ResponseWriter, r *Request) {
 	if r.RequestURI == "*" {
 		if r.ProtoAtLeast(1, 1) {
@@ -2458,8 +2449,8 @@ func (mux *ServeMux) ServeHTTP(w ResponseWriter, r *Request) {
 		w.WriteHeader(StatusBadRequest)
 		return
 	}
-	h, _ := mux.Handler(r)
-	h.ServeHTTP(w, r)
+	h, _ := mux.Handler(r) // Handler 接口的具体实现
+	h.ServeHTTP(w, r)      //处理并响应HTTP请求
 }
 
 // Handle registers the handler for the given pattern.

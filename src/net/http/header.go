@@ -21,7 +21,7 @@ import (
 //
 // The keys should be in canonical form, as returned by
 // CanonicalHeaderKey.
-type Header map[string][]string
+type Header map[string][]string //map[key] []string
 
 // Add adds the key, value pair to the header.
 // It appends to any existing values associated with key.
@@ -151,11 +151,11 @@ type keyValues struct {
 	values []string
 }
 
-// A headerSorter implements sort.Interface by sorting a []keyValues
-// by key. It's used as a pointer, so it can fit in a sort.Interface
+// A headerSorter 实现了 sort.Interface 接口，根据key来对 []keyValues 进行排序
+// It's used as a pointer, so it can fit in a sort.Interface
 // interface value without allocation.
 type headerSorter struct {
-	kvs []keyValues
+	kvs []keyValues //多个键值对，一个key对应多个value
 }
 
 func (s *headerSorter) Len() int           { return len(s.kvs) }
@@ -185,7 +185,7 @@ func (h Header) sortedKeyValues(exclude map[string]bool) (kvs []keyValues, hs *h
 	return kvs, hs
 }
 
-// WriteSubset writes a header in wire format.
+// WriteSubset 以明文文本格式写入header
 // If exclude is not nil, keys where exclude[key] == true are not written.
 // Keys are not canonicalized before checking the exclude map.
 func (h Header) WriteSubset(w io.Writer, exclude map[string]bool) error {
@@ -208,11 +208,11 @@ func (h Header) writeSubset(w io.Writer, exclude map[string]bool, trace *httptra
 			continue
 		}
 		for _, v := range kv.values {
-			v = headerNewlineToSpace.Replace(v)
-			v = textproto.TrimString(v)
+			v = headerNewlineToSpace.Replace(v) //字符串里的占位符替换
+			v = textproto.TrimString(v)         //清除字符串前后的空格（ascii编码的）
 			for _, s := range []string{kv.key, ": ", v, "\r\n"} {
 				if _, err := ws.WriteString(s); err != nil {
-					headerSorterPool.Put(sorter)
+					headerSorterPool.Put(sorter) //回收sorter实例到复用池
 					return err
 				}
 			}
@@ -225,7 +225,7 @@ func (h Header) writeSubset(w io.Writer, exclude map[string]bool, trace *httptra
 			formattedVals = nil
 		}
 	}
-	headerSorterPool.Put(sorter)
+	headerSorterPool.Put(sorter) //回收sorter实例到复用池
 	return nil
 }
 

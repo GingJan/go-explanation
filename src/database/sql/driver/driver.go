@@ -75,34 +75,25 @@ type NamedValue struct {
 	Value Value
 }
 
-// Driver is the interface that must be implemented by a database
-// driver.
-//
-// Database drivers may implement DriverContext for access
-// to contexts and to parse the name only once for a pool of connections,
-// instead of once per connection.
+// Driver 是必须由数据库驱动database driver实现的接口
+// 数据库驱动可以实现 DriverContext 以访问上下文，并只需针对连接池的解析一次名字，无需多次为每个连接解析
 type Driver interface {
-	// Open returns a new connection to the database.
-	// The name is a string in a driver-specific format.
+	// Open 返回一条连向数据库的新连接
+	// 参数name是特定数据库驱动格式的字符串
 	//
-	// Open may return a cached connection (one previously
-	// closed), but doing so is unnecessary; the sql package
-	// maintains a pool of idle connections for efficient re-use.
+	// Open 也许会返回一条缓存的连接（一条已关闭的连接）
+	// 但没必要这种做，因为sql包里已经维护有一个空闲连接池，以提高复用效率
 	//
-	// The returned connection is only used by one goroutine at a
-	// time.
+	// 返回的连接一次只能被一个goroutine使用
 	Open(name string) (Conn, error)
 }
 
-// If a Driver implements DriverContext, then sql.DB will call
-// OpenConnector to obtain a Connector and then invoke
-// that Connector's Connect method to obtain each needed connection,
-// instead of invoking the Driver's Open method for each connection.
-// The two-step sequence allows drivers to parse the name just once
-// and also provides access to per-Conn contexts.
+// 如果 Driver 实现了 DriverContext，那么 sql.DB 就不会调用 Driver 的Open方法来获取连接
+// 而是通过调用 OpenConnector 获取 Connector，然后调用该 Connector 的Connect方法来获取连接
+//
+// 这两步骤使得驱动只需解析一次name 并且提供对每条连接上下文的访问
 type DriverContext interface {
-	// OpenConnector must parse the name in the same format that Driver.Open
-	// parses the name parameter.
+	// OpenConnector 的name参数和 Driver.Open 的name参数格式是一样的
 	OpenConnector(name string) (Connector, error)
 }
 
@@ -124,9 +115,9 @@ type Connector interface {
 	// closed), but doing so is unnecessary; the sql package
 	// maintains a pool of idle connections for efficient re-use.
 	//
-	// The provided context.Context is for dialing purposes only
-	// (see net.DialContext) and should not be stored or used for
-	// other purposes. A default timeout should still be used
+	// 传入的 context.Context 只用于主动发起连接
+	// (查阅 net.DialContext) ，不应存储或用于其他用途
+	// A default timeout should still be used
 	// when dialing as a connection pool may call Connect
 	// asynchronously to any query.
 	//
@@ -134,7 +125,7 @@ type Connector interface {
 	// time.
 	Connect(context.Context) (Conn, error)
 
-	// Driver returns the underlying Driver of the Connector,
+	// Driver 返回底层 Connector 的 Driver,
 	// mainly to maintain compatibility with the Driver method
 	// on sql.DB.
 	Driver() Driver

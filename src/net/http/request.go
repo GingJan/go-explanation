@@ -94,10 +94,8 @@ var reqWriteExcludeHeader = map[string]bool{
 	"Trailer":           true,
 }
 
-// A Request represents an HTTP request received by a server
-// or to be sent by a client.
-//
-// The field semantics differ slightly between client and server
+// Request 实例代表服务器收到的一个HTTP请求 或 客户端发出的一个HTTP请求
+// 同一字段在服务端和客户端的语义略有不同
 // usage. In addition to the notes on the fields below, see the
 // documentation for Request.Write and RoundTripper.
 type Request struct {
@@ -511,7 +509,7 @@ func valueOrDefault(value, def string) string {
 // See https://codereview.appspot.com/7532043.
 const defaultUserAgent = "Go-http-client/1.1"
 
-// Write writes an HTTP/1.1 request, which is the header and body, in wire format.
+// Write 以文本明文的形式写入一个 HTTP/1.1 请求, 也即是header和body
 // This method consults the following fields of the request:
 //	Host
 //	URL
@@ -542,8 +540,8 @@ func (r *Request) WriteProxy(w io.Writer) error {
 // the Request.
 var errMissingHost = errors.New("http: Request.Write on Request with no Host or URL set")
 
-// extraHeaders may be nil
-// waitForContinue may be nil
+// extraHeaders 可能为nil
+// waitForContinue 可能为nil
 // always closes body
 func (r *Request) write(w io.Writer, usingProxy bool, extraHeaders Header, waitForContinue func() bool) (err error) {
 	trace := httptrace.ContextClientTrace(r.Context())
@@ -643,7 +641,7 @@ func (r *Request) write(w io.Writer, usingProxy bool, extraHeaders Header, waitF
 	if err != nil {
 		return err
 	}
-	err = tw.writeHeader(w, trace)
+	err = tw.writeHeader(w, trace) //把trace的数据写入到请求头
 	if err != nil {
 		return err
 	}
