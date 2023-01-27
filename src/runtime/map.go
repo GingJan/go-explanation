@@ -91,7 +91,7 @@ const (
 	// entries in the evacuated* states (except during the evacuate() method, which only happens
 	// during map writes and thus no one else can observe the map during that time).
 	emptyRest      = 0 // this cell is empty, and there are no more non-empty cells at higher indexes or overflows.
-	emptyOne       = 1 // this cell is empty
+	emptyOne       = 1 // this cell is empty 本slot单元为 empty
 	evacuatedX     = 2 // key/elem is valid.  Entry has been evacuated to first half of larger table.
 	evacuatedY     = 3 // same as above, but evacuated to second half of larger table.
 	evacuatedEmpty = 4 // cell is empty, bucket is evacuated.
@@ -108,6 +108,7 @@ const (
 )
 
 // isEmpty reports whether the given tophash array entry represents an empty bucket entry.
+// isEmpty 返回指定的tophash slot是否为空 empty bucket
 func isEmpty(x uint8) bool {
 	return x <= emptyOne
 }

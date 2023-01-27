@@ -133,7 +133,7 @@ const (
 	// the next stack check to fail.
 	// These are all larger than any real SP.
 
-	// Goroutine preemption request.
+	// Goroutine preemption request. goroutine的抢占请求
 	// 0xfffffade in hex.
 	stackPreempt = uintptrMask & -1314
 

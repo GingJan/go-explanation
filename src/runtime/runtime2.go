@@ -343,6 +343,11 @@ type gobuf struct {
 //
 // sudogs are allocated from a special pool. Use acquireSudog and
 // releaseSudog to allocate and free them.
+
+// sudog 代表在等待列表里的 g，例如被阻塞在channel等待发送/接收的goroutine
+// sudog 这个结构体是有必要的，因为g和 同步对象 之间的关系是多对多，一个goroutine（g）可以在多个等待列表里
+// 所以一个g可能会有多个sudog，同时多个g可能都在等待同一个 同步对象（例如IO事件）
+// sudog 从指定的池里分配，使用 acquireSudog 和 releaseSudog 来分配和回收它们
 type sudog struct {
 	// The following fields are protected by the hchan.lock of the
 	// channel this sudog is blocking on. shrinkstack depends on
@@ -391,6 +396,7 @@ type libcall struct {
 // Stack describes a Go execution stack.
 // The bounds of the stack are exactly [lo, hi),
 // with no implicit data structures on either side.
+// Stack 描述go的执行栈，栈的边界是[lo,hi)，无隐式的数据结构在两边
 type stack struct {
 	lo uintptr
 	hi uintptr
@@ -440,7 +446,7 @@ type g struct {
 	waitsince    int64      // approx time when the g become blocked
 	waitreason   waitReason // if status==Gwaiting
 
-	preempt       bool // preemption signal, duplicates stackguard0 = stackpreempt
+	preempt       bool // 抢占信号 preemption signal, duplicates stackguard0 = stackpreempt
 	preemptStop   bool // transition to _Gpreempted on preemption; otherwise, just deschedule
 	preemptShrink bool // shrink stack at synchronous safe point
 
@@ -512,9 +518,9 @@ const (
 
 // Values for m.freeWait.
 const (
-	freeMStack = 0  // M done, free stack and reference.
-	freeMRef   = 1  // M done, free reference.
-	freeMWait  = 2  // M still in use.
+	freeMStack = 0 // M done, free stack and reference.
+	freeMRef   = 1 // M done, free reference.
+	freeMWait  = 2 // M still in use.
 )
 
 type m struct {
@@ -532,7 +538,7 @@ type m struct {
 	mstartfn      func()
 	curg          *g       // current running goroutine
 	caughtsig     guintptr // goroutine running during fatal signal
-	p             puintptr // attached p for executing go code (nil if not executing go code)
+	p             puintptr // 获取一个P以执行go代码（如果没有go代码执行则为nil） attached p for executing go code (nil if not executing go code)
 	nextp         puintptr
 	oldp          puintptr // the p that was attached before executing a syscall
 	id            int64
@@ -546,7 +552,7 @@ type m struct {
 	blocked       bool // m is blocked on a note
 	newSigstack   bool // minit on C thread called sigaltstack
 	printlock     int8
-	incgo         bool   // m is executing a cgo call
+	incgo         bool          // m is executing a cgo call
 	freeWait      atomic.Uint32 // Whether it is safe to free g0 and delete m (one of freeMRef, freeMStack, freeMWait)
 	fastrand      uint64
 	needextram    bool
@@ -556,8 +562,8 @@ type m struct {
 	cgoCallersUse uint32      // if non-zero, cgoCallers in use temporarily
 	cgoCallers    *cgoCallers // cgo traceback if crashing in cgo call
 	park          note
-	alllink       *m // on allm
-	schedlink     muintptr
+	alllink       *m       // on allm
+	schedlink     muintptr //指向 sched 的 midle
 	lockedg       guintptr
 	createstack   [32]uintptr // stack that created this thread.
 	lockedExt     uint32      // tracking for external LockOSThread
@@ -643,7 +649,7 @@ type p struct {
 		n int32
 	}
 
-	sudogcache []*sudog
+	sudogcache []*sudog //p本地的sudogcache池
 	sudogbuf   [128]*sudog
 
 	// Cache of mspan objects from the heap.
@@ -758,8 +764,8 @@ type schedt struct {
 	// When increasing nmidle, nmidlelocked, nmsys, or nmfreed, be
 	// sure to call checkdead().
 
-	midle        muintptr // idle m's waiting for work
-	nmidle       int32    // number of idle m's waiting for work
+	midle        muintptr // idle m's waiting for work 空闲m池
+	nmidle       int32    // number of idle m's waiting for work 池里空闲m的个数
 	nmidlelocked int32    // number of locked m's waiting for work
 	mnext        int64    // number of m's that have been created and next M ID
 	maxmcount    int32    // maximum number of m's allowed (or die)
@@ -796,8 +802,8 @@ type schedt struct {
 		n       int32
 	}
 
-	// Central cache of sudog structs.
-	sudoglock  mutex
+	// Central cache of sudog structs. sudog的中央缓存
+	sudoglock  mutex //每次从sudog中央缓存里获取sudog时，都要上锁 mutex
 	sudogcache *sudog
 
 	// Central pool of available defer structs.

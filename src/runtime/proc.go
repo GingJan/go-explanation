@@ -383,12 +383,15 @@ func acquireSudog() *sudog {
 	// Break the cycle by doing acquirem/releasem around new(sudog).
 	// The acquirem/releasem increments m.locks during new(sudog),
 	// which keeps the garbage collector from being invoked.
-	mp := acquirem()
-	pp := mp.p.ptr()
-	if len(pp.sudogcache) == 0 {
+	mp := acquirem()             //获取当前g的m
+	pp := mp.p.ptr()             //获取当前m挂载的p
+	if len(pp.sudogcache) == 0 { //如果p本地的sudogcache池为空，则从全局sched的sudogcache池获取几个sudog放入到p的本地池，直到p本地池的sudog个数 > 池容量的一半
 		lock(&sched.sudoglock)
 		// First, try to grab a batch from central cache.
+		// 首先，尝试从中央缓存里批量获取多个sudog
+		// 当p的本地sudog缓存池里已有的sudog数量不足池大小的一半时，则从全局sched的中央sudog池里拿并存入p的本地缓存池
 		for len(pp.sudogcache) < cap(pp.sudogcache)/2 && sched.sudogcache != nil {
+			//从全局的sudogcache池（头部）获取一个sudog，放入到p的本地sudogcache池
 			s := sched.sudogcache
 			sched.sudogcache = s.next
 			s.next = nil
@@ -396,6 +399,7 @@ func acquireSudog() *sudog {
 		}
 		unlock(&sched.sudoglock)
 		// If the central cache is empty, allocate a new one.
+		// 如果中央缓存池没有sudog，是空的，则分配新的sudog TODO这里是不是错了？
 		if len(pp.sudogcache) == 0 {
 			pp.sudogcache = append(pp.sudogcache, new(sudog))
 		}
@@ -404,7 +408,7 @@ func acquireSudog() *sudog {
 	s := pp.sudogcache[n-1]
 	pp.sudogcache[n-1] = nil
 	pp.sudogcache = pp.sudogcache[:n-1]
-	if s.elem != nil {
+	if s.elem != nil { //如果sudog缓存池里的sudog还有数据，则报错
 		throw("acquireSudog: found s.elem != nil in cache")
 	}
 	releasem(mp)
@@ -2220,20 +2224,20 @@ func templateThread() {
 func stopm() {
 	_g_ := getg()
 
-	if _g_.m.locks != 0 {
+	if _g_.m.locks != 0 { //当m的引用次数不为0时，无法暂停m
 		throw("stopm holding locks")
 	}
-	if _g_.m.p != 0 {
+	if _g_.m.p != 0 { //当m持有一个p时，无法暂停m
 		throw("stopm holding p")
 	}
-	if _g_.m.spinning {
+	if _g_.m.spinning { //当m在自旋时，无法暂停m
 		throw("stopm spinning")
 	}
 
 	lock(&sched.lock)
-	mput(_g_.m)
+	mput(_g_.m) //把m返回sched的midle池里
 	unlock(&sched.lock)
-	mPark()
+	mPark() //挂起当前m
 	acquirep(_g_.m.nextp.ptr())
 	_g_.m.nextp = 0
 }
@@ -5454,6 +5458,7 @@ func schedEnabled(gp *g) bool {
 // Put mp on midle list.
 // sched.lock must be held.
 // May run during STW, so write barriers are not allowed.
+// 把m放回 空闲m池，可在STW时运行，因此写屏障是不允许的
 //go:nowritebarrierrec
 func mput(mp *m) {
 	assertLockHeld(&sched.lock)

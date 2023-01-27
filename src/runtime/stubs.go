@@ -21,6 +21,7 @@ func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 // getg returns the pointer to the current g.
 // The compiler rewrites calls to this function into instructions
 // that fetch the g directly (from TLS or from the dedicated register).
+// getg 返回当前g（goroutine）的指针，在编译时，编译器会重写 该函数 为 直接获取g 的指令（从 TLS线程本地存储 或 专用寄存器 里获取g）
 func getg() *g
 
 // mcall switches from the g to the g0 stack and invokes fn(g),
@@ -56,6 +57,7 @@ func mcall(fn func(*g))
 //	})
 //	... use x ...
 //
+// 在系统栈里运行fn函数
 //go:noescape
 func systemstack(fn func())
 

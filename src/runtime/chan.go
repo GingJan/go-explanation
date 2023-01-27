@@ -40,7 +40,7 @@ type hchan struct {
 	sendx    uint   // send index
 	recvx    uint   // receive index
 	recvq    waitq  // list of recv waiters
-	sendq    waitq  // list of send waiters
+	sendq    waitq  // list of send waiters 阻塞在chan的发送者列表
 
 	// lock protects all fields in hchan, as well as several
 	// fields in sudogs blocked on this channel.
@@ -428,7 +428,7 @@ func closechan(c *hchan) {
 // empty).  It uses a single atomic read of mutable state.
 func empty(c *hchan) bool {
 	// c.dataqsiz is immutable.
-	if c.dataqsiz == 0 {
+	if c.dataqsiz == 0 { //c.dataqsiz 是不变的
 		return atomic.Loadp(unsafe.Pointer(&c.sendq.first)) == nil
 	}
 	return atomic.Loaduint(&c.qcount) == 0
