@@ -220,6 +220,7 @@ func (h Header) writeSubset(w io.Writer, exclude map[string]bool, trace *httptra
 				formattedVals = append(formattedVals, v)
 			}
 		}
+		//记录trace日志
 		if trace != nil && trace.WroteHeaderField != nil {
 			trace.WroteHeaderField(kv.key, formattedVals)
 			formattedVals = nil

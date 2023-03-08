@@ -224,7 +224,7 @@ const (
 	// in a uintptr.
 	maxAlloc = (1 << heapAddrBits) - (1-_64bit)*1
 
-	// The number of bits in a heap address, the size of heap
+	// 一个堆地址占用的位数，堆The number of bits in a heap address, the size of heap
 	// arenas, and the L1 and L2 arena map sizes are related by
 	//
 	//   (1 << addr bits) = arena size * L1 entries * L2 entries

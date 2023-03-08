@@ -606,6 +606,7 @@ func (w *response) ReadFrom(src io.Reader) (n int64, err error) {
 const debugServerConnections = false
 
 // Create new connection from rwc.
+// 创建给rwc创建新的连接实例 conn
 func (srv *Server) newConn(rwc net.Conn) *conn {
 	c := &conn{
 		server: srv,
@@ -1810,6 +1811,7 @@ func isCommonNetReadError(err error) bool {
 }
 
 // Serve a new connection.
+// 处理新连接的请求
 func (c *conn) serve(ctx context.Context) {
 	c.remoteAddr = c.rwc.RemoteAddr().String()
 	ctx = context.WithValue(ctx, LocalAddrContextKey, c.rwc.LocalAddr())
@@ -2260,9 +2262,9 @@ func RedirectHandler(url string, code int) Handler {
 // .. elements or repeated slashes to an equivalent, cleaner URL.
 type ServeMux struct {
 	mu    sync.RWMutex
-	m     map[string]muxEntry
-	es    []muxEntry // slice of entries sorted from longest to shortest.
-	hosts bool       // whether any patterns contain hostnames
+	m     map[string]muxEntry //map[path]muxEntry
+	es    []muxEntry          // slice of entries sorted from longest to shortest.
+	hosts bool                // whether any patterns contain hostnames
 }
 
 type muxEntry struct {
@@ -2315,8 +2317,10 @@ func stripHostPort(h string) string {
 
 // Find a handler on a handler map given a path string.
 // Most-specific (longest) pattern wins.
+// 在 handler map里找出传入path对应的 handler
 func (mux *ServeMux) match(path string) (h Handler, pattern string) {
 	// Check for exact match first.
+	// 先精准匹配
 	v, ok := mux.m[path]
 	if ok {
 		return v.h, v.pattern
@@ -2324,6 +2328,7 @@ func (mux *ServeMux) match(path string) (h Handler, pattern string) {
 
 	// Check for longest valid match.  mux.es contains all patterns
 	// that end in / sorted from longest to shortest.
+	// 再最类似 匹配
 	for _, e := range mux.es {
 		if strings.HasPrefix(path, e.pattern) {
 			return e.h, e.pattern
@@ -2373,12 +2378,9 @@ func (mux *ServeMux) shouldRedirectRLocked(host, path string) bool {
 	return false
 }
 
-// Handler returns the handler to use for the given request,
-// consulting r.Method, r.Host, and r.URL.Path. It always returns
-// a non-nil handler. If the path is not in its canonical form, the
-// handler will be an internally-generated handler that redirects
-// to the canonical path. If the host contains a port, it is ignored
-// when matching handlers.
+// Handler 返回请求对应的handler（根据method，host，url匹配）
+// 不会返回空nil handler了，即便是不规范的path，它会阿方能和iu内部生成的handler（用来重定向到规范的path）
+// 如果host里含有port，在进行匹配时port会被忽略
 //
 // The path and host are used unchanged for CONNECT requests.
 //
@@ -2386,7 +2388,7 @@ func (mux *ServeMux) shouldRedirectRLocked(host, path string) bool {
 // request or, in the case of internally-generated redirects,
 // the pattern that will match after following the redirect.
 //
-// If there is no registered handler that applies to the request,
+// 如果该请求找不到对应的handler，则会返回 「page not found」 handler和空的pattern
 // Handler returns a ``page not found'' handler and an empty pattern.
 func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string) {
 
@@ -2406,7 +2408,7 @@ func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string) {
 	host := stripHostPort(r.Host) //提取出host
 	path := cleanPath(r.URL.Path) //提取出path
 
-	// 如果paht是 /tree 且没注册对应handler
+	// 如果path是 /tree 且没注册对应handler
 	// 重定向为 /tree/.
 	if u, ok := mux.redirectToPathSlash(host, path, r.URL); ok {
 		return RedirectHandler(u.String(), StatusMovedPermanently), u.Path //返回重定向handler
@@ -2421,20 +2423,20 @@ func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string) {
 	return mux.handler(host, r.URL.Path)
 }
 
-// handler is the main implementation of Handler.
+// handler 是 Handler 接口的主要实现
 // The path is known to be in canonical form, except for CONNECT methods.
 func (mux *ServeMux) handler(host, path string) (h Handler, pattern string) {
 	mux.mu.RLock()
 	defer mux.mu.RUnlock()
 
-	// Host-specific pattern takes precedence over generic ones
-	if mux.hosts {
+	// 指定host的pattern先于通用pattern
+	if mux.hosts { //从指定host pattern里找
 		h, pattern = mux.match(host + path)
 	}
-	if h == nil {
+	if h == nil { //从通用pattern里找
 		h, pattern = mux.match(path)
 	}
-	if h == nil {
+	if h == nil { //找不到对应的pattern，则返回not found handler
 		h, pattern = NotFoundHandler(), ""
 	}
 	return
@@ -2449,8 +2451,8 @@ func (mux *ServeMux) ServeHTTP(w ResponseWriter, r *Request) {
 		w.WriteHeader(StatusBadRequest)
 		return
 	}
-	h, _ := mux.Handler(r) // Handler 接口的具体实现
-	h.ServeHTTP(w, r)      //处理并响应HTTP请求
+	h, _ := mux.Handler(r) // Handler 接口的具体实现，主要是路由匹配，返回path对应的handler
+	h.ServeHTTP(w, r)      // 调用返回的handler 处理并响应HTTP请求
 }
 
 // Handle registers the handler for the given pattern.
@@ -2834,6 +2836,7 @@ const (
 	// send a request immediately. Connections begin at this
 	// state and then transition to either StateActive or
 	// StateClosed.
+	// StateNew 代表一条会立即发起请求的新连接，任何连接都从该状态开始，然后转换为 StateActive 或 StateClosed 状态
 	StateNew ConnState = iota
 
 	// StateActive represents a connection that has read 1 or more
@@ -2997,6 +3000,10 @@ var ErrServerClosed = errors.New("http: Server closed")
 //
 // Serve always returns a non-nil error and closes l.
 // After Shutdown or Close, the returned error is ErrServerClosed.
+//
+// Serve 在Listener l 上接受新连接请求，并创建goroutine处理每条连接
+// goroutine里读取该连接的请求并调用srv.Handler响应请求
+// 只有在Listener返回 *tls.Conn 连接时，HTTP/2才可用，并且在TLS的Config.NextProtos 里被设为 h2
 func (srv *Server) Serve(l net.Listener) error {
 	if fn := testHookServerServe; fn != nil {
 		fn(srv, l) // call hook with unwrapped listener
@@ -3027,7 +3034,7 @@ func (srv *Server) Serve(l net.Listener) error {
 
 	ctx := context.WithValue(baseCtx, ServerContextKey, srv)
 	for {
-		rw, err := l.Accept()
+		rw, err := l.Accept() //阻塞等待新连接请求
 		if err != nil {
 			select {
 			case <-srv.getDoneChan():

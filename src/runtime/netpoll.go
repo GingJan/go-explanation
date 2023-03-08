@@ -403,7 +403,7 @@ func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
 
 //go:linkname poll_runtime_pollUnblock internal/poll.runtime_pollUnblock
 func poll_runtime_pollUnblock(pd *pollDesc) {
-	lock(&pd.lock)
+	lock(&pd.lock)//上锁
 	if pd.closing {
 		throw("runtime: unblock on closing polldesc")
 	}
@@ -492,6 +492,8 @@ func netpollgoready(gp *g, traceskip int) {
 // waitio - wait only for completed IO, ignore errors
 // Concurrent calls to netpollblock in the same mode are forbidden, as pollDesc
 // can hold only a single waiting goroutine for each mode.
+// 如果IO ready/就绪 就返回true，如果超时或已经关闭则返回false
+// waitio参数
 func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 	gpp := &pd.rg
 	if mode == 'w' {

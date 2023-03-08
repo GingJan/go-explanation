@@ -19,7 +19,7 @@ type FD struct {
 	// Lock sysfd and serialize access to Read and Write methods.
 	fdmu fdMutex
 
-	// System file descriptor. Immutable until Close.
+	// 系统的文件描述符fd，不可变更，只会在 Close 关闭时变为-1
 	Sysfd int
 
 	// I/O poller.
@@ -71,9 +71,11 @@ func (fd *FD) Init(net string, pollable bool) error {
 
 // Destroy closes the file descriptor. This is called when there are
 // no remaining references.
+// destroy 关闭fd，当该fd不再有引用时才调用
 func (fd *FD) destroy() error {
 	// Poller may want to unregister fd in readiness notification mechanism,
 	// so this must be executed before CloseFunc.
+	// Poller轮询器要删掉fd的注册，所以必须在 CloseFunc 前调用
 	fd.pd.close()
 
 	// We don't use ignoringEINTR here because POSIX does not define
@@ -81,6 +83,7 @@ func (fd *FD) destroy() error {
 	// If the descriptor is indeed closed, using a loop would race
 	// with some other goroutine opening a new descriptor.
 	// (The Linux kernel guarantees that it is closed on an EINTR error.)
+	// 调用系统方法 关闭fd
 	err := CloseFunc(fd.Sysfd)
 
 	fd.Sysfd = -1

@@ -30,11 +30,11 @@ var (
 
 // Reader implements buffering for an io.Reader object.
 type Reader struct {
-	buf          []byte
-	rd           io.Reader // reader provided by the client
-	r, w         int       // buf read and write positions
+	buf          []byte    //环形切片，读写都在该切片内进行（可参考环形链表），w-r代表剩余可写入数据的空间，若w-r < len(buf) 说明环形切片未满
+	rd           io.Reader // 调用者注入的reader（底层reader）
+	r, w         int       // 表示读/写在 buf 切片的下标
 	err          error
-	lastByte     int // last byte read for UnreadByte; -1 means invalid
+	lastByte     int // last byte read for UnreadByte; -1 代表无效
 	lastRuneSize int // size of last rune read for UnreadRune; -1 means invalid
 }
 
@@ -70,6 +70,8 @@ func (b *Reader) Size() int { return len(b.buf) }
 // the buffered reader to read from r.
 // Calling Reset on the zero value of Reader initializes the internal buffer
 // to the default size.
+// Reset 放弃全部缓冲的数据，重设全部state状态，并把缓冲区reader切换到r
+// 在0值 Reader 上调用 Reset 方法可初始化buf缓冲大小为默认大小
 func (b *Reader) Reset(r io.Reader) {
 	if b.buf == nil {
 		b.buf = make([]byte, defaultBufSize)
@@ -89,10 +91,11 @@ func (b *Reader) reset(buf []byte, r io.Reader) {
 var errNegativeRead = errors.New("bufio: reader returned negative count from Read")
 
 // fill reads a new chunk into the buffer.
+// fill 从底层读取新的数据段到缓冲b.buf以填满
 func (b *Reader) fill() {
-	// Slide existing data to beginning.
+	// 把剩余的数据都挪到buf的起始位置
 	if b.r > 0 {
-		copy(b.buf, b.buf[b.r:b.w])
+		copy(b.buf, b.buf[b.r:b.w]) //把r到w的数据（这部分数据还未被读走）挪到buf的起始位置（即0-x）
 		b.w -= b.r
 		b.r = 0
 	}
@@ -102,8 +105,9 @@ func (b *Reader) fill() {
 	}
 
 	// Read new data: try a limited number of times.
+	// 从底层数据流读取新的数据：尝试 maxConsecutiveEmptyReads 次后底层依旧无数据或b.buf满了就返回错误
 	for i := maxConsecutiveEmptyReads; i > 0; i-- {
-		n, err := b.rd.Read(b.buf[b.w:])
+		n, err := b.rd.Read(b.buf[b.w:]) //从rd里读取数据到b.buf的[b.w:]里
 		if n < 0 {
 			panic(errNegativeRead)
 		}
@@ -132,6 +136,10 @@ func (b *Reader) readErr() error {
 //
 // Calling Peek prevents a UnreadByte or UnreadRune call from succeeding
 // until the next read operation.
+// Peek 从b.buf读取n个字节数据而不推进b.buf的读取进度（可重复读取该数据段，因为b.r没有推进）
+// 如果返回的字节数少于n个，error也会返回错误（提示为什么少于）
+// 如果n大于b的缓冲大小，则返回 ErrBufferFull
+//
 func (b *Reader) Peek(n int) ([]byte, error) {
 	if n < 0 {
 		return nil, ErrNegativeCount
@@ -139,7 +147,7 @@ func (b *Reader) Peek(n int) ([]byte, error) {
 
 	b.lastByte = -1
 	b.lastRuneSize = -1
-
+	//若b.buf的数据不够n个字节，则从底层b.rd读取足够数据
 	for b.w-b.r < n && b.w-b.r < len(b.buf) && b.err == nil {
 		b.fill() // b.w-b.r < len(b.buf) => buffer is not full
 	}
@@ -150,7 +158,7 @@ func (b *Reader) Peek(n int) ([]byte, error) {
 
 	// 0 <= n <= len(b.buf)
 	var err error
-	if avail := b.w - b.r; avail < n {
+	if avail := b.w - b.r; avail < n { //b.buf剩余的可读数据
 		// not enough data in buffer
 		n = avail
 		err = b.readErr()
@@ -207,16 +215,16 @@ func (b *Reader) Discard(n int) (discarded int, err error) {
 func (b *Reader) Read(p []byte) (n int, err error) {
 	n = len(p)
 	if n == 0 {
-		if b.Buffered() > 0 {
+		if b.Buffered() > 0 { //当前b.buf剩余可读的数据量
 			return 0, nil
 		}
 		return 0, b.readErr()
 	}
-	if b.r == b.w {
+	if b.r == b.w { //b.buf为空
 		if b.err != nil {
 			return 0, b.readErr()
 		}
-		if len(p) >= len(b.buf) {
+		if len(p) >= len(b.buf) { //要读取的数据量比b.buf的大小还要大，则直接从底层b.rd读取，减少不必要的复制
 			// Large read, empty buffer.
 			// Read directly into p to avoid copy.
 			n, b.err = b.rd.Read(p)
@@ -229,11 +237,10 @@ func (b *Reader) Read(p []byte) (n int, err error) {
 			}
 			return n, b.readErr()
 		}
-		// One read.
-		// Do not use b.fill, which will loop.
+		// 要读取的数据量小于等于b.buf大小，则先把底层b.rd数据读取到b.bu（这里不用b.fill()，因为会导致循环）
 		b.r = 0
 		b.w = 0
-		n, b.err = b.rd.Read(b.buf)
+		n, b.err = b.rd.Read(b.buf) //把底层数据读到b.buf
 		if n < 0 {
 			panic(errNegativeRead)
 		}
@@ -274,6 +281,7 @@ func (b *Reader) ReadByte() (byte, error) {
 // UnreadByte returns an error if the most recent method called on the
 // Reader was not a read operation. Notably, Peek, Discard, and WriteTo are not
 // considered read operations.
+// UnreadByte 返回一个错误
 func (b *Reader) UnreadByte() error {
 	if b.lastByte < 0 || b.r == 0 && b.w > 0 {
 		return ErrInvalidUnreadByte

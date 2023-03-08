@@ -80,6 +80,7 @@ var ErrNoProgress = errors.New("multiple Read calls return no data or error")
 // nothing happened; in particular it does not indicate EOF.
 //
 // Implementations must not retain p.
+// 从底层数据流读取字节到p（最多读取len(p)个字节），并返回成功读取的字节数（0 <= n <= len(p)）和遇到的任何错误
 type Reader interface {
 	Read(p []byte) (n int, err error)
 }
@@ -93,6 +94,10 @@ type Reader interface {
 // Write must not modify the slice data, even temporarily.
 //
 // Implementations must not retain p.
+// 写入从把p的len(p)个字节写入到底层数据流
+// 返回写入的字节个数n（0 <= n <= len(p)），和任何导致写入操作提前结束的错误err
+// 如果返回的n<len(p)，则必返回一个err
+// 该方法不可修改p的数据，即使是临时修改也不可以
 type Writer interface {
 	Write(p []byte) (n int, err error)
 }
