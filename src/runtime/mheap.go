@@ -373,8 +373,8 @@ func (b *mSpanStateBox) get() mSpanState {
 //
 //go:notinheap
 type mSpanList struct {
-	first *mspan // first span in list, or nil if none
-	last  *mspan // last span in list, or nil if none
+	first *mspan // 指向mspan双向链表的头结点 first span in list, or nil if none
+	last  *mspan // 指向mspan双向链表的尾结点 last span in list, or nil if none
 }
 
 //go:notinheap
@@ -383,7 +383,7 @@ type mspan struct {
 	prev *mspan     // previous span in list, or nil if none
 	list *mSpanList // For debugging. TODO: Remove.
 
-	startAddr uintptr // 第一个字节的地址，或叫 s.base() address of first byte of span aka s.base()
+	startAddr uintptr // 第一个字节的地址，或叫 s.base()，是起始地址 address of first byte of span aka s.base()
 	npages    uintptr // 本span含有的页数 number of pages in span
 
 	manualFreeList gclinkptr // list of free objects in mSpanManual spans
@@ -731,6 +731,8 @@ func (h *mheap) init() {
 	h.pages.init(&h.lock, &memstats.gcMiscSys)
 }
 
+// reclaim 清扫和回收至少npage页到堆里
+//
 // reclaim sweeps and reclaims at least npage pages into the heap.
 // It is called before allocating npage pages to keep growth in check.
 //
