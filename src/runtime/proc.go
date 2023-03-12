@@ -399,11 +399,12 @@ func acquireSudog() *sudog {
 		}
 		unlock(&sched.sudoglock)
 		// If the central cache is empty, allocate a new one.
-		// 如果中央缓存池没有sudog，是空的，则分配新的sudog TODO这里是不是错了？
+		// 如果中央缓存池没有sudog，是空的，则分配/创建新的sudog
 		if len(pp.sudogcache) == 0 {
 			pp.sudogcache = append(pp.sudogcache, new(sudog))
 		}
 	}
+	//从sudogcache池的尾部pop出一个sudog并返回
 	n := len(pp.sudogcache)
 	s := pp.sudogcache[n-1]
 	pp.sudogcache[n-1] = nil
@@ -2418,6 +2419,7 @@ func wakep() {
 
 // Stops execution of the current m that is locked to a g until the g is runnable again.
 // Returns with acquired P.
+// 停止被绑定某个g的m 的执行，当该g再次可运行时，该m恢复执行
 func stoplockedm() {
 	_g_ := getg()
 
@@ -3658,6 +3660,8 @@ func reentersyscall(pc, sp uintptr) {
 //
 // This is exported via linkname to assembly in the syscall package.
 //
+// 标准的 syscall实体，被用于go的syscall库和普通的cgo调用
+// 通过 linkname 的方式暴露给syscall包的编译器
 //go:nosplit
 //go:linkname entersyscall
 func entersyscall() {
@@ -4875,7 +4879,7 @@ func acquirep(_p_ *p) {
 	// Do the part that isn't allowed to have write barriers.
 	wirep(_p_)
 
-	// Have p; write barriers now allowed.
+	// Have p; write barriers now allowed. 已拥有p；现在写屏蔽是允许的
 
 	// Perform deferred mcache flush before this P can allocate
 	// from a potentially stale mcache.
@@ -4941,9 +4945,9 @@ func incidlelocked(v int32) {
 	unlock(&sched.lock)
 }
 
-// Check for deadlock situation.
-// The check is based on number of running M's, if 0 -> deadlock.
-// sched.lock must be held.
+// 检查当前死锁情况 Check for deadlock situation.
+// 基于正在运行的M的数量来检查是否死锁，当0个M在运行时，则死锁 The check is based on number of running M's, if 0 -> deadlock.
+// 需先持有 sche.lock sched.lock must be held.
 func checkdead() {
 	assertLockHeld(&sched.lock)
 
@@ -5058,8 +5062,8 @@ var needSysmonWorkaround bool = false
 //go:nowritebarrierrec
 func sysmon() {
 	lock(&sched.lock)
-	sched.nmsys++
-	checkdead()
+	sched.nmsys++//系统m被调用次数
+	checkdead()//检查当前死锁情况
 	unlock(&sched.lock)
 
 	lasttrace := int64(0)
@@ -5202,11 +5206,11 @@ func sysmon() {
 	}
 }
 
-type sysmontick struct {
-	schedtick   uint32
-	schedwhen   int64
-	syscalltick uint32
-	syscallwhen int64
+type sysmontick struct {//每个P都会存着一个sysmontick
+	schedtick   uint32//处理器的调度次数
+	schedwhen   int64//处理器上次调度时间
+	syscalltick uint32//系统调用的次数
+	syscallwhen int64//系统调用的时间
 }
 
 // forcePreemptNS is the time slice given to a G before it is
@@ -5237,8 +5241,8 @@ func retake(now int64) uint32 {
 			if int64(pd.schedtick) != t {
 				pd.schedtick = uint32(t)
 				pd.schedwhen = now
-			} else if pd.schedwhen+forcePreemptNS <= now {
-				preemptone(_p_)
+			} else if pd.schedwhen+forcePreemptNS <= now {//当前g的运行时长超过10ms
+				preemptone(_p_)//对当前g进行标记为可被抢占
 				// In case of syscall, preemptone() doesn't
 				// work, because there is no M wired to P.
 				sysretake = true
@@ -5255,6 +5259,7 @@ func retake(now int64) uint32 {
 			// On the one hand we don't want to retake Ps if there is no other work to do,
 			// but on the other hand we want to retake them eventually
 			// because they can prevent the sysmon thread from deep sleep.
+			// 当p的本地g队列为空 且 有空闲或自旋的m时 且 上次系统调用时间已过10ms，则继续循环
 			if runqempty(_p_) && atomic.Load(&sched.nmspinning)+atomic.Load(&sched.npidle) > 0 && pd.syscallwhen+10*1000*1000 > now {
 				continue
 			}
@@ -5658,6 +5663,7 @@ func pidleget() *p {
 
 // runqempty reports whether _p_ has no Gs on its local run queue.
 // It never returns true spuriously.
+// 当前_p_的本地g队列是否为空
 func runqempty(_p_ *p) bool {
 	// Defend against a race where 1) _p_ has G1 in runqnext but runqhead == runqtail,
 	// 2) runqput on _p_ kicks G1 to the runq, 3) runqget on _p_ empties runqnext.

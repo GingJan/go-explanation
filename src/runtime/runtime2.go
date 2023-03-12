@@ -422,7 +422,7 @@ type g struct {
 
 	_panic    *_panic // innermost panic - offset known to liblink
 	_defer    *_defer // innermost defer
-	m         *m      // current m; offset known to arm liblink
+	m         *m      // g所在的当前m current m; offset known to arm liblink
 	sched     gobuf
 	syscallsp uintptr // if status==Gsyscall, syscallsp = sched.sp to use during gc
 	syscallpc uintptr // if status==Gsyscall, syscallpc = sched.pc to use during gc
@@ -524,7 +524,7 @@ const (
 )
 
 type m struct {
-	g0      *g     // goroutine with scheduling stack
+	g0      *g     // 系统协程g0 goroutine with scheduling stack
 	morebuf gobuf  // gobuf arg to morestack
 	divmod  uint32 // div/mod denominator for arm - known to liblink
 	_       uint32 // align next field to 8 bytes
@@ -611,9 +611,9 @@ type p struct {
 	status      uint32 // one of pidle/prunning/...
 	link        puintptr
 	schedtick   uint32     // incremented on every scheduler call
-	syscalltick uint32     // incremented on every system call
+	syscalltick uint32     // 每次系统调用，都会自增 incremented on every system call
 	sysmontick  sysmontick // last tick observed by sysmon
-	m           muintptr   // back-link to associated m (nil if idle)
+	m           muintptr   // 当前关联的m back-link to associated m (nil if idle)
 	mcache      *mcache
 	pcache      pageCache
 	raceprocctx uintptr

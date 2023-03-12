@@ -31,16 +31,16 @@ const (
 )
 
 type hchan struct {
-	qcount   uint           // total data in the queue
-	dataqsiz uint           // size of the circular queue
-	buf      unsafe.Pointer // points to an array of dataqsiz elements
-	elemsize uint16
-	closed   uint32
-	elemtype *_type // element type
-	sendx    uint   // send index
-	recvx    uint   // receive index
-	recvq    waitq  // list of recv waiters
-	sendq    waitq  // list of send waiters 阻塞在chan的发送者列表
+	qcount   uint           // total data in the queue 缓冲队列里元素个数
+	dataqsiz uint           // size of the circular queue 环形队列的大小（缓冲队列是通过环形队列实现的）
+	buf      unsafe.Pointer // points to an array of dataqsiz elements 指针，指向缓冲队列
+	elemsize uint16 //缓冲队列里元素的大小
+	closed   uint32 //channel的关闭状态，0未关闭，1已关闭
+	elemtype *_type // element type 元素类型
+	sendx    uint   // send index 发送的index（指在buf里的下标index）
+	recvx    uint   // receive index 接收的index（指在buf里的下标index）
+	recvq    waitq  // list of recv waiters 阻塞在chan的接收者队列
+	sendq    waitq  // list of send waiters 阻塞在chan的发送者队列
 
 	// lock protects all fields in hchan, as well as several
 	// fields in sudogs blocked on this channel.
@@ -48,6 +48,7 @@ type hchan struct {
 	// Do not change another G's status while holding this lock
 	// (in particular, do not ready a G), as this can deadlock
 	// with stack shrinking.
+	// lock 用于保护hchan的全部字段的读写同步，也用于被本channel阻塞的sudo里的一些字段
 	lock mutex
 }
 
@@ -68,7 +69,7 @@ func makechan64(t *chantype, size int64) *hchan {
 
 	return makechan(t, int(size))
 }
-
+//make(chan T, 1)
 func makechan(t *chantype, size int) *hchan {
 	elem := t.elem
 
@@ -102,7 +103,7 @@ func makechan(t *chantype, size int) *hchan {
 		c = (*hchan)(mallocgc(hchanSize+mem, nil, true))
 		c.buf = add(unsafe.Pointer(c), hchanSize)
 	default:
-		// Elements contain pointers.
+		// Elements contain pointers. 队列里的元素是指针类型
 		c = new(hchan)
 		c.buf = mallocgc(mem, elem, true)
 	}

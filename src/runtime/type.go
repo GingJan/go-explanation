@@ -21,10 +21,10 @@ import (
 type tflag uint8
 
 const (
-	tflagUncommon      tflag = 1 << 0
-	tflagExtraStar     tflag = 1 << 1
-	tflagNamed         tflag = 1 << 2
-	tflagRegularMemory tflag = 1 << 3 // equal and hash can treat values of this type as a single region of t.size bytes
+	tflagUncommon      tflag = 1 << 0 //1
+	tflagExtraStar     tflag = 1 << 1 //2
+	tflagNamed         tflag = 1 << 2 //4
+	tflagRegularMemory tflag = 1 << 3 //8  equal and hash can treat values of this type as a single region of t.size bytes
 )
 
 // Needs to be in sync with ../cmd/link/internal/ld/decodesym.go:/^func.commonsize,
@@ -41,6 +41,7 @@ type _type struct {
 	kind       uint8
 	// function for comparing objects of this type
 	// (ptr to object A, ptr to object B) -> ==?
+	// 本type类型的实例对比函数
 	equal func(unsafe.Pointer, unsafe.Pointer) bool
 	// gcdata stores the GC type data for the garbage collector.
 	// If the KindGCProg bit is set in kind, gcdata is a GC program.
