@@ -168,7 +168,7 @@ func main() {
 
 	if GOARCH != "wasm" { // no threads on wasm yet, so no sysmon
 		systemstack(func() {
-			newm(sysmon, nil, -1)
+			newm(sysmon, nil, -1)//创建一个系统线程执行sysmon
 		})
 	}
 
@@ -206,7 +206,7 @@ func main() {
 		}
 	}()
 
-	gcenable()
+	gcenable()//启动gc的清扫器和回收器
 
 	main_init_done = make(chan bool)
 	if iscgo {
@@ -4321,6 +4321,7 @@ func Breakpoint() {
 // dolockOSThread is called by LockOSThread and lockOSThread below
 // after they modify m.locked. Do not allow preemption during this call,
 // or else the m might be different in this function than in the caller.
+// 本函数由 LockOSThread 和 lockOSThread 调起，本函数执行期间不允许抢占，否则本函数内的m和调用者的m可能会不同
 //go:nosplit
 func dolockOSThread() {
 	if GOARCH == "wasm" {
@@ -5216,7 +5217,11 @@ type sysmontick struct {//每个P都会存着一个sysmontick
 // forcePreemptNS is the time slice given to a G before it is
 // preempted.
 const forcePreemptNS = 10 * 1000 * 1000 // 10ms
-
+//对全部p进行遍历，更新每个p的被调度次数和最新被调度时间
+//当p处于运行中时，会判断在距离上次被调度时长是否超过10ms，（每次被调度时，p的调度时间都会被更新，通过此方式来判断某个g是否长时间占用p）
+//是则把此时p上运行的g标记为可被抢占，并停止g
+//若p因g而处于系统调用态，则抢占g，同时把m与p解绑，让出p去执行其他g，m则和g继续等待系统调用
+// 本函数总的是让p能够释放出来去执行更多g，以防被系统调用或长时间占用
 func retake(now int64) uint32 {
 	n := 0
 	// Prevent allp slice changes. This lock will be completely
@@ -5315,6 +5320,7 @@ func preemptall() bool {
 // The actual preemption will happen at some point in the future
 // and will be indicated by the gp->status no longer being
 // Grunning
+// 让在p上运行g的停下来
 func preemptone(_p_ *p) bool {
 	mp := _p_.m.ptr()
 	if mp == nil || mp == getg().m {

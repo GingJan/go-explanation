@@ -610,9 +610,9 @@ type p struct {
 	id          int32
 	status      uint32 // one of pidle/prunning/...
 	link        puintptr
-	schedtick   uint32     // incremented on every scheduler call
+	schedtick   uint32     // 每次被调度器调用时，都会自增 incremented on every scheduler call
 	syscalltick uint32     // 每次系统调用，都会自增 incremented on every system call
-	sysmontick  sysmontick // last tick observed by sysmon
+	sysmontick  sysmontick // 上次被sysmon调度的次数/时间信息 last tick observed by sysmon
 	m           muintptr   // 当前关联的m back-link to associated m (nil if idle)
 	mcache      *mcache
 	pcache      pageCache
@@ -626,8 +626,8 @@ type p struct {
 	goidcacheend uint64
 
 	// Queue of runnable goroutines. Accessed without lock.
-	runqhead uint32
-	runqtail uint32
+	runqhead uint32//本地队列的头
+	runqtail uint32//本地队列的尾
 	runq     [256]guintptr
 	// runnext, if non-nil, is a runnable G that was ready'd by
 	// the current G and should be run next instead of what's in
@@ -641,10 +641,10 @@ type p struct {
 	//
 	// Note that while other P's may atomically CAS this to zero,
 	// only the owner P can CAS it to a valid G.
-	runnext guintptr
+	runnext guintptr//下一个要执行的g，优先级比在本地队列里的g高。当前运行中的g的时间片未用完时，会留到runnext这个g里使用
 
 	// Available G's (status == Gdead)
-	gFree struct {
+	gFree struct {//g的复用池
 		gList
 		n int32
 	}
@@ -653,7 +653,7 @@ type p struct {
 	sudogbuf   [128]*sudog
 
 	// Cache of mspan objects from the heap.
-	mspancache struct {
+	mspancache struct {//本地内存池
 		// We need an explicit length here because this field is used
 		// in allocation codepaths where write barriers are not allowed,
 		// and eliminating the write barrier/keeping it eliminated from

@@ -57,7 +57,7 @@ func mcall(fn func(*g))
 //	})
 //	... use x ...
 //
-// 在系统栈里运行fn函数
+// 在系统线程的栈里运行fn函数
 //go:noescape
 func systemstack(fn func())
 
