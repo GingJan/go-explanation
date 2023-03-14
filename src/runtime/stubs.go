@@ -58,6 +58,10 @@ func mcall(fn func(*g))
 //	... use x ...
 //
 // 在系统线程的栈里运行fn函数
+// 如果本函数的调用者是在OS线程（g0）栈里的 或 在信号处理栈（gsignal）里的，
+// 则直接调用fn函数并返回
+// 否则，本函数的调用者就是来自受限制的常规goroutine栈里的，这种情况下，systemstack切换到OS线程栈里再调用fn函数
+// 然后再切回常规goroutine栈
 //go:noescape
 func systemstack(fn func())
 

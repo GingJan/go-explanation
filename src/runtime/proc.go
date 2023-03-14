@@ -167,8 +167,8 @@ func main() {
 	mainStarted = true
 
 	if GOARCH != "wasm" { // no threads on wasm yet, so no sysmon
-		systemstack(func() {
-			newm(sysmon, nil, -1)//创建一个系统线程执行sysmon
+		systemstack(func() {//在系统栈（g0）里执行
+			newm(sysmon, nil, -1)//创建一个新的M来执行sysmon函数
 		})
 	}
 
@@ -860,7 +860,7 @@ func ready(gp *g, traceskip int, next bool) {
 
 	// status is Gwaiting or Gscanwaiting, make Grunnable and put on runq
 	casgstatus(gp, _Gwaiting, _Grunnable)
-	runqput(_g_.m.p.ptr(), gp, next)
+	runqput(_g_.m.p.ptr(), gp, next)//把gp放入当前g所在p的本地队列里
 	wakep()
 	releasem(mp)
 }
@@ -1341,6 +1341,7 @@ func mStackIsSystemAllocated() bool {
 
 // mstart is the entry-point for new Ms.
 // It is written in assembly, uses ABI0, is marked TOPFRAME, and calls mstart0.
+// mstart 是新M的入口，使用汇编实现，内部调用 mstart0
 func mstart()
 
 // mstart0 is the Go entry-point for new Ms.
@@ -1707,7 +1708,7 @@ type cgothreadstart struct {
 //
 // This function is allowed to have write barriers even if the caller
 // isn't because it borrows _p_.
-//
+// 分配一个与任何线程无关的新m
 //go:yeswritebarrierrec
 func allocm(_p_ *p, fn func(), id int64) *m {
 	allocmLock.rlock()
@@ -1715,21 +1716,22 @@ func allocm(_p_ *p, fn func(), id int64) *m {
 	// The caller owns _p_, but we may borrow (i.e., acquirep) it. We must
 	// disable preemption to ensure it is not stolen, which would make the
 	// caller lose ownership.
-	acquirem()
+	acquirem()//获取当前g所在的m
 
 	_g_ := getg()
-	if _g_.m.p == 0 {
+	if _g_.m.p == 0 {//如果当前正在运行的g没有挂载的p，则说明是g0，那么就借用p来分配新的m
 		acquirep(_p_) // temporarily borrow p for mallocs in this function
 	}
 
 	// Release the free M list. We need to do this somewhere and
 	// this may free up a stack we can use.
+	// 释放那些多余的空闲的m，清理出的空间可以复用
 	if sched.freem != nil {
 		lock(&sched.lock)
 		var newList *m
 		for freem := sched.freem; freem != nil; {
 			wait := freem.freeWait.Load()
-			if wait == freeMWait {
+			if wait == freeMWait {//该m还在使用，所以不释放
 				next := freem.freelink
 				freem.freelink = newList
 				newList = freem
@@ -1744,7 +1746,7 @@ func allocm(_p_ *p, fn func(), id int64) *m {
 				// reachable off the system stack transitively from
 				// startm.
 				systemstack(func() {
-					stackfree(freem.g0.stack)
+					stackfree(freem.g0.stack)//释放g0对应的栈空间
 				})
 			}
 			freem = freem.freelink
@@ -1767,7 +1769,7 @@ func allocm(_p_ *p, fn func(), id int64) *m {
 	mp.g0.m = mp
 
 	if _p_ == _g_.m.p.ptr() {
-		releasep()
+		releasep()//把p和当前m解绑
 	}
 
 	releasem(_g_.m)
@@ -2086,6 +2088,7 @@ var newmHandoff struct {
 // May run with m.p==nil, so write barriers are not allowed.
 //
 // id is optional pre-allocated m ID. Omit by passing -1.
+// 创建一个新的m，以fn函数为起始点运行，或以调度器为起始点运行
 //go:nowritebarrierrec
 func newm(fn func(), _p_ *p, id int64) {
 	// allocm adds a new M to allm, but they do not start until created by
@@ -2258,6 +2261,8 @@ func mspinning() {
 // comment on acquirem below.
 //
 // Must not have write barriers because this may be called without a P.
+// 调度一些M来运行p（如果有必要，则创建新的m）
+// 如果传入的p是nil，则尝试获取空闲的p，若无空闲的p则啥都不干就return
 //go:nowritebarrierrec
 func startm(_p_ *p, spinning bool) {
 	// Disable preemption.
@@ -2276,11 +2281,11 @@ func startm(_p_ *p, spinning bool) {
 	// context, otherwise such preemption could occur on function entry to
 	// startm. Callers passing a nil P may be preemptible, so we must
 	// disable preemption before acquiring a P from pidleget below.
-	mp := acquirem()
+	mp := acquirem()//获取当前g的m
 	lock(&sched.lock)
 	if _p_ == nil {
-		_p_ = pidleget()
-		if _p_ == nil {
+		_p_ = pidleget()//尝试获取空闲的p
+		if _p_ == nil {//无空闲的p，则释放
 			unlock(&sched.lock)
 			if spinning {
 				// The caller incremented nmspinning, but there are no idle Ps,
@@ -2294,7 +2299,7 @@ func startm(_p_ *p, spinning bool) {
 		}
 	}
 	nmp := mget()
-	if nmp == nil {
+	if nmp == nil {//无空闲的m
 		// No M is available, we must drop sched.lock and call newm.
 		// However, we already own a P to assign to the M.
 		//
@@ -2307,7 +2312,7 @@ func startm(_p_ *p, spinning bool) {
 		// thus marking it as 'running' before we drop sched.lock. This
 		// new M will eventually run the scheduler to execute any
 		// queued G's.
-		id := mReserveID()
+		id := mReserveID()//m的自增长id
 		unlock(&sched.lock)
 
 		var fn func()
@@ -2342,6 +2347,7 @@ func startm(_p_ *p, spinning bool) {
 
 // Hands off P from syscall or locked M.
 // Always runs without a P, so write barriers are not allowed.
+// 从系统调用 或 被锁的M 里释放P，该函数的运行都不需要拥有P，也即是系统线程来执行的
 //go:nowritebarrierrec
 func handoffp(_p_ *p) {
 	// handoffp must start an M in any situation where
@@ -2364,6 +2370,7 @@ func handoffp(_p_ *p) {
 		return
 	}
 	lock(&sched.lock)
+	//需要执行gc了
 	if sched.gcwaiting != 0 {
 		_p_.status = _Pgcstop
 		sched.stopwait--
@@ -2373,8 +2380,9 @@ func handoffp(_p_ *p) {
 		unlock(&sched.lock)
 		return
 	}
+
 	if _p_.runSafePointFn != 0 && atomic.Cas(&_p_.runSafePointFn, 1, 0) {
-		sched.safePointFn(_p_)
+		sched.safePointFn(_p_)//在p上运行saftpoint函数，用以gc
 		sched.safePointWait--
 		if sched.safePointWait == 0 {
 			notewakeup(&sched.safePointNote)
@@ -3070,6 +3078,7 @@ func injectglist(glist *gList) {
 
 	// Mark all the goroutines as runnable before we put them
 	// on the run queues.
+	// 把每个g标记为runnable
 	head := glist.head.ptr()
 	var tail *g
 	qsize := 0
@@ -3081,25 +3090,30 @@ func injectglist(glist *gList) {
 
 	// Turn the gList into a gQueue.
 	var q gQueue
-	q.head.set(head)
-	q.tail.set(tail)
-	*glist = gList{}
+	q.head.set(head)//glist的头
+	q.tail.set(tail)//glist的尾
+	*glist = gList{}//清空glist
 
-	startIdle := func(n int) {
+	startIdle := func(n int) {//调度m去绑定空闲的p来执行g
 		for ; n != 0 && sched.npidle != 0; n-- {
 			startm(nil, false)
 		}
 	}
 
 	pp := getg().m.p.ptr()
+	//当前g是g0
 	if pp == nil {
+		//把q全部的g都放入到全局队列
 		lock(&sched.lock)
-		globrunqputbatch(&q, int32(qsize))
+		globrunqputbatch(&q, int32(qsize))//把q里的qsize个g放到全局g队列
 		unlock(&sched.lock)
+
+		//并调度m去绑定空闲的p来执行全局队列里的g
 		startIdle(qsize)
 		return
 	}
 
+	//有npidle个空闲的P就从q里取npidle个g放入到全局队列
 	npidle := int(atomic.Load(&sched.npidle))
 	var globq gQueue
 	var n int
@@ -3115,6 +3129,7 @@ func injectglist(glist *gList) {
 		qsize -= n
 	}
 
+	//把q剩余的g放入到pp的本地队列
 	if !q.empty() {
 		runqputbatch(pp, &q, qsize)
 	}
@@ -4046,6 +4061,7 @@ func syscall_runtime_AfterExec() {
 }
 
 // Allocate a new g, with a stack big enough for stacksize bytes.
+// 分配一个带有足够大的栈的新g
 func malg(stacksize int32) *g {
 	newg := new(g)
 	if stacksize >= 0 {
@@ -4874,11 +4890,11 @@ func procresize(nprocs int32) *p {
 //
 // This function is allowed to have write barriers even if the caller
 // isn't because it immediately acquires _p_.
-//
+// 把p和当前g的m绑定
 //go:yeswritebarrierrec
 func acquirep(_p_ *p) {
 	// Do the part that isn't allowed to have write barriers.
-	wirep(_p_)
+	wirep(_p_)//把p和当前g的m绑定
 
 	// Have p; write barriers now allowed. 已拥有p；现在写屏蔽是允许的
 
@@ -4917,17 +4933,21 @@ func wirep(_p_ *p) {
 }
 
 // Disassociate p and the current m.
+// 把p和当前m解绑，解绑后，p处于空闲态
 func releasep() *p {
 	_g_ := getg()
 
+	//当前是g0
 	if _g_.m.p == 0 {
 		throw("releasep: invalid arg")
 	}
+
 	_p_ := _g_.m.p.ptr()
 	if _p_.m.ptr() != _g_.m || _p_.status != _Prunning {
 		print("releasep: m=", _g_.m, " m->p=", _g_.m.p.ptr(), " p->m=", hex(_p_.m), " p->status=", _p_.status, "\n")
 		throw("releasep: invalid p state")
 	}
+
 	if trace.enabled {
 		traceProcStop(_g_.m.p.ptr())
 	}
@@ -5059,19 +5079,19 @@ var forcegcperiod int64 = 2 * 60 * 1e9
 var needSysmonWorkaround bool = false
 
 // Always runs without a P, so write barriers are not allowed.
-//
+// 运行系统监控sysmon线程，无数绑定P执行，它是上帝函数，负责调度sched和其他goroutine的执行
 //go:nowritebarrierrec
 func sysmon() {
 	lock(&sched.lock)
 	sched.nmsys++//系统m被调用次数
-	checkdead()//检查当前死锁情况
+	checkdead()//检查当前死锁情况，若出现死锁，则直接报错退出进程
 	unlock(&sched.lock)
 
 	lasttrace := int64(0)
 	idle := 0 // how many cycles in succession we had not wokeup somebody
 	delay := uint32(0)
 
-	for {
+	for {//系统监控sysmon循环执行，每次睡眠delay
 		if idle == 0 { // start with 20us sleep...
 			delay = 20
 		} else if idle > 50 { // start doubling the sleep after 1ms...
@@ -5142,10 +5162,10 @@ func sysmon() {
 			asmcgocall(*cgo_yield, nil)
 		}
 		// poll network if not polled for more than 10ms
-		lastpoll := int64(atomic.Load64(&sched.lastpoll))
-		if netpollinited() && lastpoll != 0 && lastpoll+10*1000*1000 < now {
+		lastpoll := int64(atomic.Load64(&sched.lastpoll))//上次调用netpoll的时间点
+		if netpollinited() && lastpoll != 0 && lastpoll+10*1000*1000 < now {//已经有10ms没调用netpoll了
 			atomic.Cas64(&sched.lastpoll, uint64(lastpoll), uint64(now))
-			list := netpoll(0) // non-blocking - returns list of goroutines
+			list := netpoll(0) // non-blocking - returns list of goroutines 非阻塞，立即返回有网络数据ready的goroutine列表
 			if !list.empty() {
 				// Need to decrement number of idle locked M's
 				// (pretending that one more is running) before injectglist.
@@ -5155,7 +5175,7 @@ func sysmon() {
 				// observes that there is no work to do and no other running M's
 				// and reports deadlock.
 				incidlelocked(-1)
-				injectglist(&list)
+				injectglist(&list)//把list里的g放入全局队列或本p的本地队列
 				incidlelocked(1)
 			}
 		}
@@ -5209,7 +5229,7 @@ func sysmon() {
 
 type sysmontick struct {//每个P都会存着一个sysmontick
 	schedtick   uint32//处理器的调度次数
-	schedwhen   int64//处理器上次调度时间
+	schedwhen   int64//处理器P上次调度时间
 	syscalltick uint32//系统调用的次数
 	syscallwhen int64//系统调用的时间
 }
@@ -5264,7 +5284,7 @@ func retake(now int64) uint32 {
 			// On the one hand we don't want to retake Ps if there is no other work to do,
 			// but on the other hand we want to retake them eventually
 			// because they can prevent the sysmon thread from deep sleep.
-			// 当p的本地g队列为空 且 有空闲或自旋的m时 且 上次系统调用时间已过10ms，则继续循环
+			// 当p的本地队列为空 且 有空闲p或自旋m时 且 p上次系统调用时间未过10ms，则不处理本p
 			if runqempty(_p_) && atomic.Load(&sched.nmspinning)+atomic.Load(&sched.npidle) > 0 && pd.syscallwhen+10*1000*1000 > now {
 				continue
 			}
@@ -5275,7 +5295,7 @@ func retake(now int64) uint32 {
 			// Otherwise the M from which we retake can exit the syscall,
 			// increment nmidle and report deadlock.
 			incidlelocked(-1)
-			if atomic.Cas(&_p_.status, s, _Pidle) {
+			if atomic.Cas(&_p_.status, s, _Pidle) {//把p从 系统调用 状态改为 空闲 状态，以便p可执行其他g
 				if trace.enabled {
 					traceGoSysBlock(_p_)
 					traceProcStop(_p_)
@@ -5483,6 +5503,7 @@ func mput(mp *m) {
 // Try to get an m from midle list.
 // sched.lock must be held.
 // May run during STW, so write barriers are not allowed.
+// 从空闲m池里获取一个m
 //go:nowritebarrierrec
 func mget() *m {
 	assertLockHeld(&sched.lock)

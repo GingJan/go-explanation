@@ -535,13 +535,13 @@ type m struct {
 	goSigStack    gsignalStack      // Go-allocated signal handling stack
 	sigmask       sigset            // storage for saved signal mask
 	tls           [tlsSlots]uintptr // thread-local storage (for x86 extern register)
-	mstartfn      func()
+	mstartfn      func()// m 线程的入口函数
 	curg          *g       // current running goroutine
 	caughtsig     guintptr // goroutine running during fatal signal
 	p             puintptr // 获取一个P以执行go代码（如果没有go代码执行则为nil） attached p for executing go code (nil if not executing go code)
 	nextp         puintptr
 	oldp          puintptr // the p that was attached before executing a syscall
-	id            int64
+	id            int64//m的标识
 	mallocing     int32
 	throwing      int32
 	preemptoff    string // if != "", keep curg running on this m
@@ -610,9 +610,9 @@ type p struct {
 	id          int32
 	status      uint32 // one of pidle/prunning/...
 	link        puintptr
-	schedtick   uint32     // 每次被调度器调用时，都会自增 incremented on every scheduler call
-	syscalltick uint32     // 每次系统调用，都会自增 incremented on every system call
-	sysmontick  sysmontick // 上次被sysmon调度的次数/时间信息 last tick observed by sysmon
+	schedtick   uint32     // 每次被调度器调用时，都会自增incremented on every scheduler call
+	syscalltick uint32     // 每次p发起系统调用，都会自增 incremented on every system call
+	sysmontick  sysmontick // 上次被sysmon调度的次数/时间信息last tick observed by sysmon
 	m           muintptr   // 当前关联的m back-link to associated m (nil if idle)
 	mcache      *mcache
 	pcache      pageCache
@@ -812,6 +812,7 @@ type schedt struct {
 
 	// freem is the list of m's waiting to be freed when their
 	// m.exited is set. Linked through m.freelink.
+	// 等待释放的m，这些m会被回收，给回操作系统
 	freem *m
 
 	gcwaiting  uint32 // gc is waiting to run

@@ -64,7 +64,7 @@ func lockWithRank(l *mutex, rank lockRank) {
 	}
 	gp := getg()
 	// Log the new class.
-	systemstack(func() {
+	systemstack(func() {//以下逻辑在系统栈（g0）里执行
 		i := gp.m.locksHeldLen
 		if i >= len(gp.m.locksHeld) {
 			throw("too many locks held concurrently for rank checking")
