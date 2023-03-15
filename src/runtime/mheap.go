@@ -447,7 +447,7 @@ type mspan struct {
 	// if sweepgen == h->sweepgen, the span is swept and ready to use
 	// if sweepgen == h->sweepgen + 1, the span was cached before sweep began and is still cached, and needs sweeping
 	// if sweepgen == h->sweepgen + 3, the span was swept and then cached and is still cached
-	// h->sweepgen is incremented by 2 after every GC
+	// 每次gc后，h->sweepgen的都会自增2 h->sweepgen is incremented by 2 after every GC
 
 	sweepgen    uint32
 	divMul      uint32        // for divide by elemsize

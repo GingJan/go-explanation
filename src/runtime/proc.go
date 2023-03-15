@@ -794,7 +794,7 @@ func mcommoninit(mp *m, id int64) {
 		callers(1, mp.createstack[:])
 	}
 
-	lock(&sched.lock)
+	lock(&sched.lock)//调度器全局锁
 
 	if id >= 0 {
 		mp.id = id
@@ -1719,13 +1719,13 @@ func allocm(_p_ *p, fn func(), id int64) *m {
 	acquirem()//获取当前g所在的m
 
 	_g_ := getg()
-	if _g_.m.p == 0 {//如果当前正在运行的g没有挂载的p，则说明是g0，那么就借用p来分配新的m
+	if _g_.m.p == 0 {//如果当前正在运行的g没有挂载的p，则说明是g0，那么就借用p来绑定g0的m（系统线程）
 		acquirep(_p_) // temporarily borrow p for mallocs in this function
 	}
 
 	// Release the free M list. We need to do this somewhere and
 	// this may free up a stack we can use.
-	// 释放那些多余的空闲的m，清理出的空间可以复用
+	// 释放那些多余的空闲m，清理出的空间可以复用
 	if sched.freem != nil {
 		lock(&sched.lock)
 		var newList *m
@@ -1756,7 +1756,7 @@ func allocm(_p_ *p, fn func(), id int64) *m {
 	}
 
 	mp := new(m)
-	mp.mstartfn = fn
+	mp.mstartfn = fn//m的入口函数
 	mcommoninit(mp, id)
 
 	// In case of cgo or Solaris or illumos or Darwin, pthread_create will make us a stack.
@@ -4892,6 +4892,7 @@ func procresize(nprocs int32) *p {
 // isn't because it immediately acquires _p_.
 // 把p和当前g的m绑定
 //go:yeswritebarrierrec
+// 当前m和p绑定，该函数可以拥有写屏障，因为马上就拥有p了
 func acquirep(_p_ *p) {
 	// Do the part that isn't allowed to have write barriers.
 	wirep(_p_)//把p和当前g的m绑定
@@ -4900,6 +4901,7 @@ func acquirep(_p_ *p) {
 
 	// Perform deferred mcache flush before this P can allocate
 	// from a potentially stale mcache.
+	// 在p从mcache申请内存前，执行 已被推迟的mcache 内存清理
 	_p_.mcache.prepareForSweep()
 
 	if trace.enabled {
@@ -4910,15 +4912,17 @@ func acquirep(_p_ *p) {
 // wirep is the first step of acquirep, which actually associates the
 // current M to _p_. This is broken out so we can disallow write
 // barriers for this part, since we don't yet have a P.
-//
+// wirep是 acquirep 的第一步，该函数把当前m关联到p上
 //go:nowritebarrierrec
 //go:nosplit
 func wirep(_p_ *p) {
 	_g_ := getg()
 
-	if _g_.m.p != 0 {
+	if _g_.m.p != 0 {//当前的m已绑有p
 		throw("wirep: already in go")
 	}
+
+	//p也绑有m 或 p当前不是空闲态，则抛出异常
 	if _p_.m != 0 || _p_.status != _Pidle {
 		id := int64(0)
 		if _p_.m != 0 {
@@ -4927,8 +4931,12 @@ func wirep(_p_ *p) {
 		print("wirep: p->m=", _p_.m, "(", id, ") p->status=", _p_.status, "\n")
 		throw("wirep: invalid p state")
 	}
+
+	//把当前m与p绑定
 	_g_.m.p.set(_p_)
+	//把p与当前m绑定
 	_p_.m.set(_g_.m)
+	//p状态
 	_p_.status = _Prunning
 }
 

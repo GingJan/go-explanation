@@ -277,6 +277,7 @@ func (c *mcache) releaseAll() {
 // prepareForSweep flushes c if the system has entered a new sweep phase
 // since c was populated. This must happen between the sweep phase
 // starting and the first allocation from c.
+// 如果c已被分配，且系统进入了一个新的清扫阶段，则对c进行清理
 func (c *mcache) prepareForSweep() {
 	// Alternatively, instead of making sure we do this on every P
 	// between starting the world and allocating on that P, we
@@ -292,7 +293,7 @@ func (c *mcache) prepareForSweep() {
 		println("bad flushGen", c.flushGen, "in prepareForSweep; sweepgen", sg)
 		throw("bad flushGen")
 	}
-	c.releaseAll()
+	c.releaseAll()//释放mcache的内存
 	stackcache_clear(c)
 	atomic.Store(&c.flushGen, mheap_.sweepgen) // Synchronizes with gcStart
 }

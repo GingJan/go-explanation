@@ -917,7 +917,7 @@ func printAncestorTracebackFuncInfo(f funcInfo, pc uintptr) {
 }
 
 func callers(skip int, pcbuf []uintptr) int {
-	sp := getcallersp()
+	sp := getcallersp()//获取调用者的栈指针
 	pc := getcallerpc()
 	gp := getg()
 	var n int
