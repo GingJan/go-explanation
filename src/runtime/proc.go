@@ -2113,7 +2113,8 @@ func newm(fn func(), _p_ *p, id int64) {
 		// purpose). We don't want to clone that into another
 		// thread. Instead, ask a known-good thread to create
 		// the thread for us.
-		//
+		// 我们在一个上锁的M 或 由C启动的线程上
+		// 这个线程的内核状态
 		// This is disabled on Plan 9. See golang.org/issue/22227.
 		//
 		// TODO: This may be unnecessary on Windows, which
@@ -2132,6 +2133,7 @@ func newm(fn func(), _p_ *p, id int64) {
 		// The M has not started yet, but the template thread does not
 		// participate in STW, so it will always process queued Ms and
 		// it is safe to releasem.
+		// M还没开始
 		releasem(getg().m)
 		return
 	}
