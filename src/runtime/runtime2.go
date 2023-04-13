@@ -344,6 +344,7 @@ type gobuf struct {
 // sudogs are allocated from a special pool. Use acquireSudog and
 // releaseSudog to allocate and free them.
 
+// 可以把sudog看作同步对象，g和同步对象的关系是多对多
 // sudog 代表在等待列表里的 g，例如被阻塞在channel等待发送/接收的goroutine
 // sudog 这个结构体是有必要的，因为g和 同步对象 之间的关系是多对多，一个goroutine（g）可以在多个等待列表里
 // 所以一个g可能会有多个sudog，同时多个g可能都在等待同一个 同步对象（例如IO事件）
@@ -365,7 +366,7 @@ type sudog struct {
 	// are only accessed when holding a semaRoot lock.
 
 	acquiretime int64
-	releasetime int64
+	releasetime int64//用于pprof？
 	ticket      uint32
 
 	// isSelect indicates g is participating in a select, so
@@ -376,6 +377,7 @@ type sudog struct {
 	// succeeded. It is true if the goroutine was awoken because a
 	// value was delivered over channel c, and false if awoken
 	// because c was closed.
+	// success 标示在channel c上的通讯是否成功，如果协程因为channel c可访问而从阻塞中唤醒，则设为true，如果因为channel被关闭而唤醒则设为false
 	success bool
 
 	parent   *sudog // semaRoot binary tree

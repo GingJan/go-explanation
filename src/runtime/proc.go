@@ -2511,6 +2511,8 @@ func gcstopm() {
 // acquiring a P in several places.
 //
 //go:yeswritebarrierrec
+// 调度gp以在当前m上运行
+// 本函数不会返回
 func execute(gp *g, inheritTime bool) {
 	_g_ := getg()
 
@@ -2541,7 +2543,7 @@ func execute(gp *g, inheritTime bool) {
 		traceGoStart()
 	}
 
-	gogo(&gp.sched)
+	gogo(&gp.sched)//执行gp内的逻辑
 }
 
 // Finds a runnable goroutine to execute.
@@ -3342,6 +3344,7 @@ func parkunlock_c(gp *g, lock unsafe.Pointer) bool {
 }
 
 // park continuation on g0.
+// 本函数在g0上继续执行，gp是需要被park的用户协程
 func park_m(gp *g) {
 	_g_ := getg()
 
@@ -3350,7 +3353,7 @@ func park_m(gp *g) {
 	}
 
 	casgstatus(gp, _Grunning, _Gwaiting)
-	dropg()
+	dropg()//把m和gp解绑
 
 	if fn := _g_.m.waitunlockf; fn != nil {
 		ok := fn(gp, _g_.m.waitlock)
