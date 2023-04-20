@@ -3152,13 +3152,13 @@ func injectglist(glist *gList) {
 // One round of scheduler: find a runnable goroutine and execute it.
 // Never returns.
 func schedule() {
-	_g_ := getg()
+	_g_ := getg()//此时_g_是g0
 
 	if _g_.m.locks != 0 {
 		throw("schedule: holding locks")
 	}
 
-	if _g_.m.lockedg != 0 {//如果当前M被锁住了
+	if _g_.m.lockedg != 0 {//如果当前M因为G而被锁住了
 		stoplockedm()//则挂起当前M
 
 		//到此M已被唤醒
@@ -3167,6 +3167,7 @@ func schedule() {
 
 	// We should not schedule away from a g that is executing a cgo call,
 	// since the cgo call is using the m's g0 stack.
+	// 当正在执行cgo调用时，不应该把该g调度走，因为cgo调用是使用m的g0栈的，也即此时是g0在运行
 	if _g_.m.incgo {
 		throw("schedule: in cgo")
 	}
@@ -3175,7 +3176,7 @@ top:
 	pp := _g_.m.p.ptr()
 	pp.preempt = false
 
-	if sched.gcwaiting != 0 {
+	if sched.gcwaiting != 0 {//当需要执行gc了
 		gcstopm()
 		goto top
 	}
