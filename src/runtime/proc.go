@@ -1453,7 +1453,7 @@ func mstartm0() {
 //go:nosplit
 func mPark() {
 	gp := getg()
-	notesleep(&gp.m.park)
+	notesleep(&gp.m.park)//挂起当前m
 	noteclear(&gp.m.park)
 }
 
@@ -2451,7 +2451,9 @@ func stoplockedm() {
 	}
 	incidlelocked(1)
 	// Wait until another thread schedules lockedg again.
-	mPark()
+	mPark()//挂起当前m
+
+	//m已被唤醒
 	status := readgstatus(_g_.m.lockedg.ptr())
 	if status&^_Gscan != _Grunnable {
 		print("runtime:stoplockedm: lockedg (atomicstatus=", status, ") is not Grunnable or Gscanrunnable\n")
@@ -3157,7 +3159,9 @@ func schedule() {
 	}
 
 	if _g_.m.lockedg != 0 {//如果当前M被锁住了
-		stoplockedm()
+		stoplockedm()//则挂起当前M
+
+		//到此M已被唤醒
 		execute(_g_.m.lockedg.ptr(), false) // 永不return Never returns.
 	}
 

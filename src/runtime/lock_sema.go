@@ -178,12 +178,12 @@ func notesleep(n *note) {
 	// Queued. Sleep.
 	gp.m.blocked = true//入队，进入休眠
 	if *cgo_yield == nil {
-		semasleep(-1)
+		semasleep(-1)//挂起当前线程，进入休眠
 	} else {
 		// Sleep for an arbitrary-but-moderate interval to poll libc interceptors.
 		const ns = 10e6
 		for atomic.Loaduintptr(&n.key) == 0 {
-			semasleep(ns)
+			semasleep(ns)//挂起当前线程，进入ns纳秒休眠
 			asmcgocall(*cgo_yield, nil)
 		}
 	}
