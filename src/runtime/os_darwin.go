@@ -35,6 +35,8 @@ func semacreate(mp *m) {
 	}
 }
 
+//当传入ns>0时，代表挂起当前线程m ns 纳秒
+//传入ns<0时，代表一直挂起直到mp.cond的状态变更触发事件
 //go:nosplit
 func semasleep(ns int64) int32 {
 	var start int64
@@ -50,15 +52,15 @@ func semasleep(ns int64) int32 {
 			return 0
 		}
 		if ns >= 0 {
-			spent := nanotime() - start
+			spent := nanotime() - start//当前时间距离起始时间
 			if spent >= ns {
 				pthread_mutex_unlock(&mp.mutex)
 				return -1
 			}
 			var t timespec
 			t.setNsec(ns - spent)
-			err := pthread_cond_timedwait_relative_np(&mp.cond, &mp.mutex, &t)
-			if err == _ETIMEDOUT {
+			err := pthread_cond_timedwait_relative_np(&mp.cond, &mp.mutex, &t)//挂起当前线程 t 纳秒
+			if err == _ETIMEDOUT {//超时 退出挂起
 				pthread_mutex_unlock(&mp.mutex)
 				return -1
 			}
