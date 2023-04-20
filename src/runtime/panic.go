@@ -1034,6 +1034,7 @@ func recovery(gp *g) {
 // system, prints stack traces starting from its caller, and terminates the
 // process.
 //
+// fatalthrow 实现了一个不可回复的runtime throw，它暂停了系统，打印出从它调用者开始的调用路径，同时终结进程
 //go:nosplit
 func fatalthrow() {
 	pc := getcallerpc()

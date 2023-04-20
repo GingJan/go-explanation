@@ -10,7 +10,7 @@ import (
 )
 
 type mOS struct {
-	initialized bool
+	initialized bool//当前os线程是否初始化
 	mutex       pthreadmutex
 	cond        pthreadcond
 	count       int
@@ -63,7 +63,7 @@ func semasleep(ns int64) int32 {
 				return -1
 			}
 		} else {
-			pthread_cond_wait(&mp.cond, &mp.mutex)
+			pthread_cond_wait(&mp.cond, &mp.mutex)//将当前线程挂起，直到mp.cond的状态变化时，唤醒该线程
 		}
 	}
 }

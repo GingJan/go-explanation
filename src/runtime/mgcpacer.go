@@ -231,6 +231,8 @@ type gcControllerState struct {
 	// to conservatively overcount than undercount.
 	//
 	// Read and updated atomically.
+	// scannableStackSize 是已分配的正在被协程使用的栈空间大小
+	//
 	scannableStackSize uint64
 
 	// globalsScan is the total amount of global variable space

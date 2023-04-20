@@ -69,16 +69,18 @@ const (
 	// to each stack below the usual guard area for OS-specific
 	// purposes like signal handling. Used on Windows, Plan 9,
 	// and iOS because they do not use a separate stack.
+	// 因为windows，plan9，iOS不使用栈分裂优化技术，本常量用于给每个栈添加额外的空间，这些空间可能用于如信号处理等
 	_StackSystem = goos.IsWindows*512*goarch.PtrSize + goos.IsPlan9*512 + goos.IsIos*goarch.IsArm64*1024
 
 	// The minimum size of stack used by Go code
+	// 协程的栈的最小空间，2k
 	_StackMin = 2048
 
 	// The minimum stack size to allocate.
 	// The hackery here rounds FixedStack0 up to a power of 2.
-	_FixedStack0 = _StackMin + _StackSystem
+	_FixedStack0 = _StackMin + _StackSystem//最小栈空间2k+额外空间
 	_FixedStack1 = _FixedStack0 - 1
-	_FixedStack2 = _FixedStack1 | (_FixedStack1 >> 1)
+	_FixedStack2 = _FixedStack1 | (_FixedStack1 >> 1) // _FixedStack1 + _FixedStack1 / 2
 	_FixedStack3 = _FixedStack2 | (_FixedStack2 >> 2)
 	_FixedStack4 = _FixedStack3 | (_FixedStack3 >> 4)
 	_FixedStack5 = _FixedStack4 | (_FixedStack4 >> 8)
@@ -117,7 +119,7 @@ const (
 	//            == 3: logging of per-word updates
 	//            == 4: logging of per-word reads
 	stackDebug       = 0
-	stackFromSystem  = 0 // allocate stacks from system memory instead of the heap
+	stackFromSystem  = 0 // 从系统内存申请空间而不是从堆里申请 allocate stacks from system memory instead of the heap
 	stackFaultOnFree = 0 // old stacks are mapped noaccess to detect use after free
 	stackPoisonCopy  = 0 // fill stack that should not be accessed with garbage, to detect bad dereferences during copy
 	stackNoCache     = 0 // disable per-P small stack caches
@@ -196,6 +198,7 @@ func stacklog2(n uintptr) int {
 
 // Allocates a stack from the free pool. Must be called with
 // stackpool[order].item.mu held.
+// 从空闲池里分配一个栈，调用该函数前需先持有stackpool[order].item.mu锁
 func stackpoolalloc(order uint8) gclinkptr {
 	list := &stackpool[order].item.span
 	s := list.first
@@ -339,16 +342,16 @@ func stackcache_clear(c *mcache) {
 // resources and must not split the stack.
 //
 //go:systemstack
-// 分配一个n字节的栈
+// 分配一个n字节的栈，该函数必须在系统栈里运行，因为它使用了p的资源且不可使用分裂栈优化
 func stackalloc(n uint32) stack {
 	// Stackalloc must be called on scheduler stack, so that we
 	// never try to grow the stack during the code that stackalloc runs.
 	// Doing so would cause a deadlock (issue 1547).
 	thisg := getg()
-	if thisg != thisg.m.g0 {
+	if thisg != thisg.m.g0 {//如果该函数当前不是在系统栈（也即调度器所在的栈）里执行
 		throw("stackalloc not on scheduler stack")
 	}
-	if n&(n-1) != 0 {
+	if n&(n-1) != 0 {//栈的大小必须是2的次方
 		throw("stack size not a power of 2")
 	}
 	if stackDebug >= 1 {
@@ -357,7 +360,7 @@ func stackalloc(n uint32) stack {
 
 	if debug.efence != 0 || stackFromSystem != 0 {
 		n = uint32(alignUp(uintptr(n), physPageSize))
-		v := sysAlloc(uintptr(n), &memstats.stacks_sys)
+		v := sysAlloc(uintptr(n), &memstats.stacks_sys)//向操作系统申请空间
 		if v == nil {
 			throw("out of memory (stackalloc)")
 		}
@@ -367,6 +370,7 @@ func stackalloc(n uint32) stack {
 	// Small stacks are allocated with a fixed-size free-list allocator.
 	// If we need a stack of a bigger size, we fall back on allocating
 	// a dedicated span.
+	// 小的栈空间从空闲链表分配器的固定大小池分配
 	var v unsafe.Pointer
 	if n < _FixedStack<<_NumStackOrders && n < _StackCacheSize {
 		order := uint8(0)
@@ -853,25 +857,31 @@ func syncadjustsudogs(gp *g, used uintptr, adjinfo *adjustinfo) uintptr {
 
 // Copies gp's stack to a new stack of a different size.
 // Caller must have changed gp status to Gcopystack.
+// 把gp的栈复制到一个不同大小的新栈，调用者得先把gp的状态更新为Gcopystack
+// 步骤如下：
+// 1.申请大小为newsize的新栈空间
+// 2.把gp里原栈的数据复制到新栈空间里
+// 3.gp指向新栈
+// 4.释放旧栈的空间
 func copystack(gp *g, newsize uintptr) {
-	if gp.syscallsp != 0 {
+	if gp.syscallsp != 0 {//当前gp正在进行系统调用，则不允许进行栈扩展
 		throw("stack growth not allowed in system call")
 	}
 	old := gp.stack
 	if old.lo == 0 {
 		throw("nil stackbase")
 	}
-	used := old.hi - gp.sched.sp
+	used := old.hi - gp.sched.sp//栈底（高地址）- 栈顶（低地址）得出已使用的栈空间
 	// Add just the difference to gcController.addScannableStack.
 	// g0 stacks never move, so this will never account for them.
 	// It's also fine if we have no P, addScannableStack can deal with
 	// that case.
-	gcController.addScannableStack(getg().m.p.ptr(), int64(newsize)-int64(old.hi-old.lo))
+	gcController.addScannableStack(getg().m.p.ptr(), int64(newsize)-int64(old.hi-old.lo))//添加/减小 已统计的栈大小
 
 	// allocate new stack
-	new := stackalloc(uint32(newsize))
+	new := stackalloc(uint32(newsize))//分配一个大小为newsize的新栈
 	if stackPoisonCopy != 0 {
-		fillstack(new, 0xfd)
+		fillstack(new, 0xfd)//0xfd = 1111 1101 = 253，给新栈每个空间用253初始化
 	}
 	if stackDebug >= 1 {
 		print("copystack gp=", gp, " [", hex(old.lo), " ", hex(old.hi-used), " ", hex(old.hi), "]", " -> [", hex(new.lo), " ", hex(new.hi-used), " ", hex(new.hi), "]/", newsize, "\n")
@@ -909,6 +919,7 @@ func copystack(gp *g, newsize uintptr) {
 	}
 
 	// Copy the stack (or the rest of it) to the new location
+	// 把原栈的数据复制到新栈
 	memmove(unsafe.Pointer(new.hi-ncopy), unsafe.Pointer(old.hi-ncopy), ncopy)
 
 	// Adjust remaining structures that have pointers into stacks.
@@ -922,17 +933,19 @@ func copystack(gp *g, newsize uintptr) {
 	}
 
 	// Swap out old stack for new one
-	gp.stack = new
+	// gp切换指向的新栈
+	gp.stack = new//指向新栈
 	gp.stackguard0 = new.lo + _StackGuard // NOTE: might clobber a preempt request
-	gp.sched.sp = new.hi - used
+	gp.sched.sp = new.hi - used//得出栈顶位置
 	gp.stktopsp += adjinfo.delta
 
 	// Adjust pointers in the new stack.
 	gentraceback(^uintptr(0), ^uintptr(0), 0, gp, 0, nil, 0x7fffffff, adjustframe, noescape(unsafe.Pointer(&adjinfo)), 0)
 
 	// free old stack
+	// 释放旧栈空间
 	if stackPoisonCopy != 0 {
-		fillstack(old, 0xfc)
+		fillstack(old, 0xfc)//0xfc= 1111 1100 = 252
 	}
 	stackfree(old)
 }
@@ -958,6 +971,7 @@ func round2(x int32) int32 {
 // compiler doesn't check this.
 //
 //go:nowritebarrierrec
+// 栈扩展
 func newstack() {
 	thisg := getg()
 	// TODO: double check all gp. shouldn't be getg().
@@ -1189,11 +1203,11 @@ func shrinkstack(gp *g) {
 		return
 	}
 
-	oldsize := gp.stack.hi - gp.stack.lo
+	oldsize := gp.stack.hi - gp.stack.lo//原栈空间的大小
 	newsize := oldsize / 2
 	// Don't shrink the allocation below the minimum-sized stack
 	// allocation.
-	if newsize < _FixedStack {
+	if newsize < _FixedStack {//如果缩容后低于指定值，则不进行缩容
 		return
 	}
 	// Compute how much of the stack is currently in use and only
@@ -1201,6 +1215,7 @@ func shrinkstack(gp *g) {
 	// current stack. The currently used stack includes everything
 	// down to the SP plus the stack guard space that ensures
 	// there's room for nosplit functions.
+	// 计算当前使用的栈有多大，只缩减那些只使用了4分1的栈
 	avail := gp.stack.hi - gp.stack.lo
 	if used := gp.stack.hi - gp.sched.sp + _StackLimit; used >= avail/4 {
 		return

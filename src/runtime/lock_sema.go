@@ -164,7 +164,7 @@ func notewakeup(n *note) {
 
 func notesleep(n *note) {
 	gp := getg()
-	if gp != gp.m.g0 {
+	if gp != gp.m.g0 {//当前函数必须在g0上执行
 		throw("notesleep not on g0")
 	}
 	semacreate(gp.m)
@@ -176,7 +176,7 @@ func notesleep(n *note) {
 		return
 	}
 	// Queued. Sleep.
-	gp.m.blocked = true
+	gp.m.blocked = true//入队，进入休眠
 	if *cgo_yield == nil {
 		semasleep(-1)
 	} else {
@@ -187,7 +187,7 @@ func notesleep(n *note) {
 			asmcgocall(*cgo_yield, nil)
 		}
 	}
-	gp.m.blocked = false
+	gp.m.blocked = false//推出休眠
 }
 
 //go:nosplit

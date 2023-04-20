@@ -14,10 +14,10 @@ import (
 // adjust Gobuf as if it executed a call to fn with context ctxt
 // and then stopped before the first instruction in fn.
 func gostartcall(buf *gobuf, fn, ctxt unsafe.Pointer) {
-	sp := buf.sp
-	sp -= goarch.PtrSize
-	*(*uintptr)(unsafe.Pointer(sp)) = buf.pc
+	sp := buf.sp//该协程的栈顶地址
+	sp -= goarch.PtrSize//
+	*(*uintptr)(unsafe.Pointer(sp)) = buf.pc//pc区域和栈区域是相邻的吗？
 	buf.sp = sp
-	buf.pc = uintptr(fn)
+	buf.pc = uintptr(fn)//该协程从fn地址开始执行
 	buf.ctxt = ctxt
 }

@@ -21,7 +21,7 @@ func add(p unsafe.Pointer, x uintptr) unsafe.Pointer {
 // getg returns the pointer to the current g.
 // The compiler rewrites calls to this function into instructions
 // that fetch the g directly (from TLS or from the dedicated register).
-// getg 返回当前g（goroutine）的指针，在编译时，编译器会重写调用该函数的地方为直接获取g的汇编指令（从 TLS线程本地存储 或 专用寄存器 里获取g的指令）
+// getg 返回当前g（goroutine）的指针，在编译时，编译器会重写调用该函数的地方为「获取g的汇编指令」（从 TLS线程本地存储 或 专用寄存器 里获取g的指令）
 func getg() *g
 
 // mcall switches from the g to the g0 stack and invokes fn(g),
@@ -58,7 +58,8 @@ func mcall(fn func(*g))
 //	... use x ...
 //
 // 在系统线程的栈里运行fn函数
-// 如果本函数的调用者是在OS线程（g0）栈里的 或 在信号处理栈（gsignal）里的，
+// 调用该函数时，会从用户协程切换到g0系统协程
+// 如果本函数的调用者是在OS线程（即g0）栈里的 或 在信号处理（即gsignal）栈里的，
 // 则直接调用fn函数并返回
 // 否则，本函数的调用者就是来自受限制的常规goroutine栈里的，这种情况下，systemstack切换到OS线程栈里再调用fn函数
 // 然后再切回常规goroutine栈
@@ -301,7 +302,9 @@ func publicationBarrier()
 // that might relocate the stack in order to grow or shrink it.
 // A general rule is that the result of getcallersp should be used
 // immediately and can only be passed to nosplit functions.
-
+//
+// getcallerpc 返回本函数的调用者的调用者的pc
+// getcallersp 返回本函数的调用者的调用者的栈指针
 //go:noescape
 func getcallerpc() uintptr
 

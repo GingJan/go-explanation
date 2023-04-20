@@ -198,7 +198,7 @@ func netpollGenericInit() {
 		unlock(&netpollInitLock)
 	}
 }
-
+//网络轮询是否已初始化
 func netpollinited() bool {
 	return atomic.Load(&netpollInited) != 0
 }

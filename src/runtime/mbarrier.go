@@ -32,8 +32,8 @@ import (
 //             shade(ptr)
 //         *slot = ptr
 //
-// slot is the destination in Go code.
-// ptr is the value that goes into the slot in Go code.
+// slot 是目的地址 is the destination in Go code.
+// ptr 要被赋值到slot里的 is the value that goes into the slot in Go code.
 //
 // Shade indicates that it has seen a white pointer by adding the referent
 // to wbuf as well as marking it.

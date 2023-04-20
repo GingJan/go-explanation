@@ -363,6 +363,9 @@ const preemptMSupported = true
 // marked for preemption and the goroutine is at an asynchronous
 // safe-point, it will preempt the goroutine. It always atomically
 // increments mp.preemptGen after handling a preemption request.
+// 发送一个抢占请求给m，该请求可能被异步处理，也可能和其他发送给m的请求合并一起处理
+// 当请求被接收后，如果正在执行的G或P标记有「被抢占」标识且协程处于异步安全点，则会把该协程抢占走（该协程就会被暂停了）
+// 处理一个抢占信号后，原子递增mp.preemptGen
 func preemptM(mp *m) {
 	// On Darwin, don't try to preempt threads during exec.
 	// Issue #41702.
@@ -600,6 +603,7 @@ var testSigusr1 func(gp *g) bool
 // The garbage collector may have stopped the world, so write barriers
 // are not allowed.
 //
+// sighandler 当触发信号时，该函数会被调用，全局g
 //go:nowritebarrierrec
 func sighandler(sig uint32, info *siginfo, ctxt unsafe.Pointer, gp *g) {
 	_g_ := getg()

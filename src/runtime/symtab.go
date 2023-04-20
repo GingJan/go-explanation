@@ -338,7 +338,7 @@ const (
 // Note that in some situations involving plugins, there may be multiple
 // copies of a particular special runtime function.
 // Note: this list must match the list in cmd/internal/objabi/funcid.go.
-type funcID uint8
+type funcID uint8//函数类型
 
 const (
 	funcID_normal funcID = iota // not a special function
@@ -351,14 +351,14 @@ const (
 	funcID_goexit
 	funcID_gogo
 	funcID_gopanic
-	funcID_handleAsyncEvent
+	funcID_handleAsyncEvent//处理异步事件的函数
 	funcID_mcall
 	funcID_morestack
 	funcID_mstart
 	funcID_panicwrap
 	funcID_rt0_go
 	funcID_runfinq
-	funcID_runtime_main
+	funcID_runtime_main//该函数是runtime的main函数
 	funcID_sigpanic
 	funcID_systemstack
 	funcID_systemstack_switch
