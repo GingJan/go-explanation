@@ -3207,7 +3207,7 @@ top:
 			traceGoUnpark(gp, 0)
 			tryWakeP = true
 		}
-	}``
+	}
 	if gp == nil && gcBlackenEnabled != 0 {
 		gp = gcController.findRunnableGCWorker(_g_.m.p.ptr())
 		if gp != nil {
