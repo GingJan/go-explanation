@@ -164,7 +164,7 @@ type mutex struct {
 	// Futex-based impl treats it as uint32 key,
 	// while sema-based impl as M* waitm.
 	// Used to be a union, but unions break precise GC.
-	key uintptr
+	key uintptr//=0解锁，1上锁，2休眠
 }
 
 // sleep and wakeup on one-time events.

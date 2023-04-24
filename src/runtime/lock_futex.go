@@ -57,7 +57,7 @@ func lock2(l *mutex) {
 
 	// Speculative grab for lock.
 	v := atomic.Xchg(key32(&l.key), mutex_locked)
-	if v == mutex_unlocked {
+	if v == mutex_unlocked {//原值就是0未上锁
 		return
 	}
 
@@ -68,23 +68,29 @@ func lock2(l *mutex) {
 	// careful to change it back to MUTEX_SLEEPING before
 	// returning, to ensure that the sleeping thread gets
 	// its wakeup call.
+	// wait的值要么是 MUTEX_LOCKED，要么是 MUTEX_SLEEPING
+	// 具体值取决于当前是否有线程在该互斥锁上休眠
+	// 如果曾经有把l->key的值从 MUTEX_SLEEPING 改为其他值，则在返回前
+	// 必须谨慎地把它改回 MUTEX_SLEEPING，以确保当前休眠线程收到唤醒事件
 	wait := v
 
 	// On uniprocessors, no point spinning.
 	// On multiprocessors, spin for ACTIVE_SPIN attempts.
-	spin := 0
+	// 单核情况下，不自旋，多核情况下，自旋 ACTIVE_SPIN 次
+	spin := 0//自旋次数
 	if ncpu > 1 {
 		spin = active_spin
 	}
 	for {
 		// Try for lock, spinning.
+		// 自旋尝试获取锁
 		for i := 0; i < spin; i++ {
-			for l.key == mutex_unlocked {
+			for l.key == mutex_unlocked {//当互斥锁是解锁态时，则尝试获取该锁
 				if atomic.Cas(key32(&l.key), mutex_unlocked, wait) {
 					return
 				}
 			}
-			procyield(active_spin_cnt)
+			procyield(active_spin_cnt)//执行30次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
 		}
 
 		// Try for lock, rescheduling.
@@ -94,16 +100,18 @@ func lock2(l *mutex) {
 					return
 				}
 			}
-			osyield()
+			osyield()//相当于sleep，精度更小，暂停一下，等待其他协程执行
 		}
 
+		// 依旧没法获取到锁，则进入休眠
 		// Sleep.
+		// 进入休眠
 		v = atomic.Xchg(key32(&l.key), mutex_sleeping)
 		if v == mutex_unlocked {
 			return
 		}
 		wait = mutex_sleeping
-		futexsleep(key32(&l.key), mutex_sleeping, -1)
+		futexsleep(key32(&l.key), mutex_sleeping, -1)//如果互斥锁的状态是sleeping，则进入永久休眠
 	}
 }
 

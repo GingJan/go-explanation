@@ -143,7 +143,7 @@ var initSigmask sigset
 
 // The main goroutine.
 func main() {
-	g := getg()
+	g := getg()// g = main goroutine，不再是g0了
 
 	// Racectx of m0->g0 is used only as the parent of the main goroutine.
 	// It must not be used for anything else.
@@ -152,7 +152,7 @@ func main() {
 	// Max stack size is 1 GB on 64-bit, 250 MB on 32-bit.
 	// Using decimal instead of binary GB and MB because
 	// they look nicer in the stack overflow failure message.
-	if goarch.PtrSize == 8 {
+	if goarch.PtrSize == 8 {//64位的，main协程最大栈空间则1G
 		maxstacksize = 1000000000
 	} else {
 		maxstacksize = 250000000
@@ -167,8 +167,8 @@ func main() {
 	mainStarted = true
 
 	if GOARCH != "wasm" { // no threads on wasm yet, so no sysmon
-		systemstack(func() {//在系统栈（g0）里执行
-			newm(sysmon, nil, -1)//创建一个新的M来执行sysmon函数
+		systemstack(func() {//现在执行的是main goroutine，所以使用的是main goroutine的栈，需要切换到g0栈去执行newm()
+			newm(sysmon, nil, -1)//创建一个新的M来执行sysmon 监控线程，不需要跟p关联即可运行
 		})
 	}
 
@@ -269,7 +269,8 @@ func main() {
 		gopark(nil, nil, waitReasonPanicWait, traceEvGoStop, 1)
 	}
 
-	exit(0)
+	exit(0)//进入系统调用exit()，以此方式退出进程，可以看出main goroutine并不返回，而是直接进入系统调用exit退出进程了
+	//保护性代码，如果exit意外返回，下面的代码也会让该进程crash死掉
 	for {
 		var x *int32
 		*x = 0
@@ -1396,7 +1397,7 @@ func mstart0() {
 // so that we can set up g0.sched to return to the call of mstart1 above.
 //go:noinline
 func mstart1() {
-	_g_ := getg()
+	_g_ := getg()//启动过程时 _g_ = m0的g0
 
 	if _g_ != _g_.m.g0 {
 		throw("bad runtime·mstart")
@@ -1409,27 +1410,27 @@ func mstart1() {
 	// And goexit0 does a gogo that needs to return from mstart1
 	// and let mstart0 exit the thread.
 	_g_.sched.g = guintptr(unsafe.Pointer(_g_))
-	_g_.sched.pc = getcallerpc()
-	_g_.sched.sp = getcallersp()
+	_g_.sched.pc = getcallerpc()//返回本函数的调用者的调用者的pc，也即mstart1执行完的返回地址
+	_g_.sched.sp = getcallersp()//获取调用mstart1时的栈顶地址
 
 	asminit()
 	minit()
 
 	// Install signal handlers; after minit so that minit can
 	// prepare the thread to be able to handle the signals.
-	if _g_.m == &m0 {
+	if _g_.m == &m0 {//启动时_g_.m是m0，所以会执行下面的mstartm0函数
 		mstartm0()
 	}
 
-	if fn := _g_.m.mstartfn; fn != nil {
+	if fn := _g_.m.mstartfn; fn != nil {//初始化过程中fn == nil
 		fn()
 	}
 
-	if _g_.m != &m0 {
-		acquirep(_g_.m.nextp.ptr())
+	if _g_.m != &m0 {// m0已经绑定了allp[0]，若当前m不是m0的话还没有p，所以需要获取一个p
+		acquirep(_g_.m.nextp.ptr())//把获取到的p（_g_.m.nextp）的地址写入到m里
 		_g_.m.nextp = 0
 	}
-	schedule()
+	schedule()//schedule函数永远不会返回
 }
 
 // mstartm0 implements part of mstart1 that only runs on the m0.
@@ -2524,14 +2525,16 @@ func gcstopm() {
 // 把gp调度到当前m上运行
 // 本函数不会返回
 func execute(gp *g, inheritTime bool) {
-	_g_ := getg()
+	_g_ := getg()//g0
 
 	// Assign gp.m before entering _Grunning so running Gs have an
 	// M.
+	//把g和m关联起来
 	_g_.m.curg = gp
 	gp.m = _g_.m
+	//设置待运行gp的状态为_Grunning
 	casgstatus(gp, _Grunnable, _Grunning)
-	gp.waitsince = 0
+	gp.waitsince = 0//当g被阻塞时，waitsince为阻塞开始的时间点
 	gp.preempt = false
 	gp.stackguard0 = gp.stack.lo + _StackGuard
 	if !inheritTime {
@@ -2553,7 +2556,8 @@ func execute(gp *g, inheritTime bool) {
 		traceGoStart()
 	}
 
-	gogo(&gp.sched)//执行gp内的逻辑
+	//gogo完成从g0到gp真正的切换，调度gp以执行gp的逻辑
+	gogo(&gp.sched)
 }
 
 // Finds a runnable goroutine to execute.
@@ -3152,14 +3156,14 @@ func injectglist(glist *gList) {
 // One round of scheduler: find a runnable goroutine and execute it.
 // Never returns.
 func schedule() {
-	_g_ := getg()//此时_g_是g0
+	_g_ := getg()//此时_g_是g0（也即在m0上）
 
-	if _g_.m.locks != 0 {
+	if _g_.m.locks != 0 {//当前m0被锁住（休眠ing）
 		throw("schedule: holding locks")
 	}
 
-	if _g_.m.lockedg != 0 {//如果当前M因为G而被锁住了
-		stoplockedm()//则挂起当前M
+	if _g_.m.lockedg != 0 {//如果当前M因为某个G而被锁住了
+		stoplockedm()//该函数内部逻辑会把M挂起，以下逻辑则暂停执行
 
 		//到此M已被唤醒
 		execute(_g_.m.lockedg.ptr(), false) // 永不return Never returns.
@@ -3270,6 +3274,8 @@ top:
 		goto top
 	}
 
+	//当前运行的是runtime的代码，函数调用栈使用的是g0的栈空间
+	//调用execute切换到gp的代码和栈空间去运行
 	execute(gp, inheritTime)
 }
 
