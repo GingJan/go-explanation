@@ -21,13 +21,15 @@ func accept(s int) (int, syscall.Sockaddr, string, error) {
 	// because we have put fd.sysfd into non-blocking mode.
 	// However, a call to the File method will put it back into
 	// blocking mode. We can't take that risk, so no use of ForkLock here.
-	ns, sa, err := AcceptFunc(s)
+	ns, sa, err := AcceptFunc(s)//系统调用 accept，因为s 是非阻塞fd，所以当没有连接时会立即返回
 	if err == nil {
 		syscall.CloseOnExec(ns)
 	}
-	if err != nil {
+	if err != nil {//当没连接时，则跑这里的逻辑
 		return -1, nil, "accept", err
 	}
+
+	//当有连接时，则跑这里的逻辑
 	if err = syscall.SetNonblock(ns, true); err != nil {
 		CloseFunc(ns)
 		return -1, nil, "setnonblock", err

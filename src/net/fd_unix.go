@@ -170,6 +170,9 @@ func (fd *netFD) connect(ctx context.Context, la, ra syscall.Sockaddr) (rsa sysc
 
 func (fd *netFD) accept() (netfd *netFD, err error) {
 	d, rsa, errcall, err := fd.pfd.Accept()
+	//当没有新连接创建请求时，则本协程阻塞在这，不会往下走（底层调用了gopark）
+
+	//当有新连接创建请求进来时，则本协程继续运行，走下面逻辑（）
 	if err != nil {
 		if errcall != "" {
 			err = wrapSyscallError(errcall, err)

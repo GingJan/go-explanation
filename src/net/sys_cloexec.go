@@ -22,12 +22,13 @@ func sysSocket(family, sotype, proto int) (int, error) {
 	syscall.ForkLock.RLock()
 	s, err := socketFunc(family, sotype, proto)
 	if err == nil {
-		syscall.CloseOnExec(s)
+		syscall.CloseOnExec(s)//closeOnExec
 	}
 	syscall.ForkLock.RUnlock()
 	if err != nil {
 		return -1, os.NewSyscallError("socket", err)
 	}
+	//设置为非阻塞
 	if err = syscall.SetNonblock(s, true); err != nil {
 		poll.CloseFunc(s)
 		return -1, os.NewSyscallError("setnonblock", err)

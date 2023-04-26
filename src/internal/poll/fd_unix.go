@@ -606,19 +606,22 @@ func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 	}
 	for {
 		s, rsa, errcall, err := accept(fd.Sysfd)
-		if err == nil {
+		if err == nil {//当有新连接时，走这里
 			return s, rsa, "", err
 		}
 		switch err {
-		case syscall.EINTR:
+		case syscall.EINTR://系统中断
 			continue
-		case syscall.EAGAIN:
+		case syscall.EAGAIN://非阻塞，无连接时，走这里
 			if fd.pd.pollable() {
+				//当没有新连接请求时，则当前协程进入gopark
 				if err = fd.pd.waitRead(fd.isFile); err == nil {
+
+					//网络有io，此时本协程被唤醒，继续执行后续逻辑，continue回到上面accept，获取到一个新连接
 					continue
 				}
 			}
-		case syscall.ECONNABORTED:
+		case syscall.ECONNABORTED://在backlog队列里等待被accept的socket还没来得及被accept就关闭了
 			// This means that a socket on the listen
 			// queue was closed before we Accept()ed it;
 			// it's a silly error, so try again.
