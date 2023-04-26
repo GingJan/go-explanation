@@ -762,9 +762,9 @@ func dumpgstatus(gp *g) {
 
 // sched.lock must be held.
 func checkmcount() {
-	assertLockHeld(&sched.lock)
+	assertLockHeld(&sched.lock)//如果没有持有锁，则会抛出异常
 
-	if mcount() > sched.maxmcount {
+	if mcount() > sched.maxmcount {//如果剩余可用的m个数大于最大值，则不能再创建m
 		print("runtime: program exceeds ", sched.maxmcount, "-thread limit\n")
 		throw("thread exhaustion")
 	}
@@ -774,7 +774,7 @@ func checkmcount() {
 // considered 'running' by checkdead.
 //
 // sched.lock must be held.
-// mReserveID 返回下一个ID，用于新的m，
+// mReserveID 返回下一个ID，用于作为新m的id
 func mReserveID() int64 {
 	assertLockHeld(&sched.lock)
 
@@ -783,7 +783,7 @@ func mReserveID() int64 {
 	}
 	id := sched.mnext
 	sched.mnext++
-	checkmcount()
+	checkmcount()//是否可以继续创建m
 	return id
 }
 
@@ -1710,7 +1710,10 @@ type cgothreadstart struct {
 //
 // This function is allowed to have write barriers even if the caller
 // isn't because it borrows _p_.
-// 分配一个与任何线程无关的新m
+// 分配一个与任何线程无关的新 m 结构体，
+// 如果有需要，可传入p作为分配时的上下文
+// fn参数会被作为m的入口函数（存放在 m.mstartfn 字段）
+// id参数是可选的预分配id，传入-1时底层会调用 mReserveID 获取一个id
 //go:yeswritebarrierrec
 func allocm(_p_ *p, fn func(), id int64) *m {
 	allocmLock.rlock()
