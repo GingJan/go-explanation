@@ -2276,6 +2276,7 @@ func mspinning() {
 // Must not have write barriers because this may be called without a P.
 // 调度一些M来运行p（如果有必要，则创建新的m）
 // 如果传入的p是nil，则尝试获取空闲的p，若无空闲的p则啥都不干就return
+// 如果传入spinning=true，则调用者自增了nmspinning，
 //go:nowritebarrierrec
 func startm(_p_ *p, spinning bool) {
 	// Disable preemption.
@@ -2311,8 +2312,8 @@ func startm(_p_ *p, spinning bool) {
 			return
 		}
 	}
-	nmp := mget()
-	if nmp == nil {//无空闲的m
+	nmp := mget()//从空闲m池里获取一个m
+	if nmp == nil {//无空闲的m，则创建一个新m
 		// No M is available, we must drop sched.lock and call newm.
 		// However, we already own a P to assign to the M.
 		//
@@ -2333,7 +2334,7 @@ func startm(_p_ *p, spinning bool) {
 			// The caller incremented nmspinning, so set m.spinning in the new M.
 			fn = mspinning
 		}
-		newm(fn, _p_, id)
+		newm(fn, _p_, id)//创建新m，以fn为入口执行，_p_为要绑定的p，id为m的标识
 		// Ownership transfer of _p_ committed by start in newm.
 		// Preemption is now safe.
 		releasem(mp)
@@ -2427,6 +2428,8 @@ func handoffp(_p_ *p) {
 
 // Tries to add one more P to execute G's.
 // Called when a G is made runnable (newproc, ready).
+// 尝试添加多一个P来执行G
+// 当G被设为runnable时（即调用newproc，ready时），调用本函数
 func wakep() {
 	if atomic.Load(&sched.npidle) == 0 {
 		return
@@ -2435,7 +2438,7 @@ func wakep() {
 	if atomic.Load(&sched.nmspinning) != 0 || !atomic.Cas(&sched.nmspinning, 0, 1) {
 		return
 	}
-	startm(nil, true)
+	startm(nil, true)//调度m来执行，传入的p=nil，则尝试获取空闲的p
 }
 
 // Stops execution of the current m that is locked to a g until the g is runnable again.

@@ -152,11 +152,13 @@ func notewakeup(n *note) {
 	// What was it before?
 	switch {
 	case v == 0:
+		//若原n.key==0，则无任何人在此n上等待
 		// Nothing was waiting. Done.
 	case v == locked:
+		// 若原n.key==locke，则等待在该n的人被唤醒两次，这是不允许的
 		// Two notewakeups! Not allowed.
 		throw("notewakeup - double wakeup")
-	default:
+	default://原n.key==某个在该n上等待的m
 		// Must be the waiting m. Wake it up.
 		semawakeup((*m)(unsafe.Pointer(v)))
 	}
