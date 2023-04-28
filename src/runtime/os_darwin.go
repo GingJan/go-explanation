@@ -37,45 +37,53 @@ func semacreate(mp *m) {
 
 //当传入ns>0时，代表挂起当前线程m ns 纳秒
 //传入ns<0时，代表一直挂起直到mp.cond的状态变更触发事件
+// 首先通过线程互斥锁来阻塞a纳秒，当获取到锁时
 //go:nosplit
 func semasleep(ns int64) int32 {
 	var start int64
 	if ns >= 0 {
 		start = nanotime()
 	}
+
 	mp := getg().m
-	pthread_mutex_lock(&mp.mutex)
+	pthread_mutex_lock(&mp.mutex)//获取线程互斥锁
+
+	//拿到锁了
 	for {
 		if mp.count > 0 {
 			mp.count--
 			pthread_mutex_unlock(&mp.mutex)
 			return 0
 		}
-		if ns >= 0 {
+		if ns >= 0 {//休眠ns 纳秒再返回
 			spent := nanotime() - start//当前时间距离起始时间
 			if spent >= ns {
 				pthread_mutex_unlock(&mp.mutex)
 				return -1
 			}
 			var t timespec
-			t.setNsec(ns - spent)
+			t.setNsec(ns - spent)//还剩t纳秒休眠
 			err := pthread_cond_timedwait_relative_np(&mp.cond, &mp.mutex, &t)//挂起当前线程 t 纳秒
-			if err == _ETIMEDOUT {//超时 退出挂起
-				pthread_mutex_unlock(&mp.mutex)
+
+			//t纳秒后，线程恢复运行
+			if err == _ETIMEDOUT {//已达到休眠t纳秒退出挂起
+				pthread_mutex_unlock(&mp.mutex)//释放线程互斥锁
 				return -1
 			}
-		} else {
-			pthread_cond_wait(&mp.cond, &mp.mutex)//将当前线程挂起，直到mp.cond的状态变化时，唤醒该线程
+		} else {//一直休眠，知道有信号唤起
+			pthread_cond_wait(&mp.cond, &mp.mutex)//将当前线程挂起/阻塞，直到mp.cond的信号变化时，唤醒该线程
 		}
 	}
 }
 
 //go:nosplit
 func semawakeup(mp *m) {
-	pthread_mutex_lock(&mp.mutex)
+	pthread_mutex_lock(&mp.mutex)//线程互斥锁，当 线程无法获取锁时，则阻塞
+
+	//线程获取到锁了，线程被唤醒，恢复运行
 	mp.count++
 	if mp.count > 0 {
-		pthread_cond_signal(&mp.cond)
+		pthread_cond_signal(&mp.cond)//通知所有阻塞在mp.cond信号的线程
 	}
 	pthread_mutex_unlock(&mp.mutex)
 }
