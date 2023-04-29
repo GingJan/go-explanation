@@ -38,6 +38,15 @@ func getg() *g
 // This must NOT be go:noescape: if fn is a stack-allocated closure,
 // fn puts g on a run queue, and g executes before fn returns, the
 // closure will be invalidated while it is still executing.
+// mcall函数的作用是在系统栈中执行调度代码，并且调度代码不会返回，将在运行过程中又一次执行mcall。
+// mcall的流程是保存当前的g的上下文，切换到g0的上下文，传入函数参数，跳转到fn函数代码执行
+//常见的调用mcall执行的函数有：
+// mcall(gosched_m)
+//mcall(park_m)
+//mcall(goexit0)
+//mcall(exitsyscall0)
+//mcall(preemptPark)
+//mcall(gopreempt_m)
 func mcall(fn func(*g))
 
 // systemstack runs fn on a system stack.
@@ -63,6 +72,8 @@ func mcall(fn func(*g))
 // 则直接调用fn函数并返回
 // 否则，本函数的调用者就是来自受限制的常规goroutine栈里的，这种情况下，systemstack切换到OS线程栈里再调用fn函数
 // 然后再切回常规goroutine栈
+// systemstack函数的作用是在系统栈中执行只能由g0(或gsignal)执行的调度代码，
+// 和mcall不同的是，在执行完调度代码后会切回到现在正在执行的代码。
 //go:noescape
 func systemstack(fn func())
 

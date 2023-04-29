@@ -381,18 +381,19 @@ TEXT runtime·gogo(SB), NOSPLIT, $0-8
 
 TEXT gogo<>(SB), NOSPLIT, $0
 	get_tls(CX)
-	MOVQ	DX, g(CX)
+	MOVQ	DX, g(CX)//把DX寄存器的值也就是gp.sched.g(这是一个指向g的指针)写入线程本地存储之中，这样后面的代码就可以通过线程本地存储获取到当前正在执行的goroutine的g结构体对象，从而找到与之关联的m和p
 	MOVQ	DX, R14		// set the g register
-	MOVQ	gobuf_sp(BX), SP	// restore SP
+	MOVQ	gobuf_sp(BX), SP	//设置CPU的栈顶寄存器SP为gp.sched.sp，这条指令完成了栈的切换，从g0的栈切换到了gp的栈
 	MOVQ	gobuf_ret(BX), AX
 	MOVQ	gobuf_ctxt(BX), DX
 	MOVQ	gobuf_bp(BX), BP
+	//清空gp.sched中不再需要的值，因为我们已把相关值放入CPU对应的寄存器了，不再需要，这样做可以少gc的工作量
 	MOVQ	$0, gobuf_sp(BX)	// clear to help garbage collector
 	MOVQ	$0, gobuf_ret(BX)
 	MOVQ	$0, gobuf_ctxt(BX)
 	MOVQ	$0, gobuf_bp(BX)
-	MOVQ	gobuf_pc(BX), BX
-	JMP	BX
+	MOVQ	gobuf_pc(BX), BX//把gp.sched.pc的值读取到BX寄存器，这个pc值是gp这个goroutine马上需要执行的第一条指令的地址
+	JMP	BX//这里的JMP BX指令把BX寄存器里面的指令地址放入CPU的rip寄存器，于是，CPU就会跳转到该地址继续执行属于gp这个goroutine的代码，这样就完成了goroutine的切换
 
 // func mcall(fn func(*g))
 // Switch to m->g0's stack, call fn(g).
