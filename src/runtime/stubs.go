@@ -257,7 +257,7 @@ func breakpoint()
 //go:noescape
 func reflectcall(stackArgsType *_type, fn, stackArgs unsafe.Pointer, stackArgsSize, stackRetOffset, frameSize uint32, regArgs *abi.RegArgs)
 
-func procyield(cycles uint32)
+func procyield(cycles uint32)//执行cycles次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
 
 type neverCallThisFunction struct{}
 

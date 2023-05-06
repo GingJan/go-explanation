@@ -18,7 +18,7 @@ func read(fd int32, p unsafe.Pointer, n int32) int32
 func closefd(fd int32) int32
 
 func exit(code int32)
-func usleep(usec uint32)
+func usleep(usec uint32)//把线程挂起一段时间，单位是微秒，本函数可暂时使程序停止执行。这个函数在windows 操作系统无法使用
 
 //go:nosplit
 func usleep_no_g(usec uint32) {

@@ -52,6 +52,6 @@ func init() {
 func runtime_canSpin(i int) bool
 
 // runtime_doSpin does active spinning.
-func runtime_doSpin()
+func runtime_doSpin()//底层是调用procyield实现自旋，通过执行30次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
 
 func runtime_nanotime() int64

@@ -39,7 +39,8 @@ func semacreate(mp *m) {
 // 传入ns<0时，代表一直挂起，直到mp.cond的状态变更触发事件才唤醒
 //
 // 1.首先通过线程互斥锁来阻塞a纳秒，当获取到锁时
-// 2.
+// 2.通过判断mp.count来判断是否有其他线程调用过semawakeup，是则解锁并立即返回，不进入睡眠（因为要被wakeup唤醒了）
+// 3.若ns>=0，则休眠ns，否则通过pthread_cond_wait放入阻塞队列的方式一直休眠，直到有其他线程调用semawakeup才返回
 //go:nosplit
 func semasleep(ns int64) int32 {
 	var start int64

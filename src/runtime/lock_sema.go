@@ -35,7 +35,7 @@ const (
 func lock(l *mutex) {
 	lockWithRank(l, getLockRank(l))
 }
-
+//通过对mutex.key字段的原子操作来获取锁
 func lock2(l *mutex) {
 	gp := getg()
 	if gp.m.locks < 0 {
@@ -47,46 +47,48 @@ func lock2(l *mutex) {
 	if atomic.Casuintptr(&l.key, 0, locked) {
 		return
 	}
-	semacreate(gp.m)
+	semacreate(gp.m)//对m所在线程初始化线程互斥锁和线程信号量
 
 	// On uniprocessor's, no point spinning.
 	// On multiprocessors, spin for ACTIVE_SPIN attempts.
-	spin := 0
+	spin := 0//自旋次数/尝试次数
 	if ncpu > 1 {
 		spin = active_spin
 	}
 Loop:
 	for i := 0; ; i++ {
 		v := atomic.Loaduintptr(&l.key)
-		if v&locked == 0 {
+		if v&locked == 0 {//未上锁，尝试获取锁
 			// Unlocked. Try to lock.
 			if atomic.Casuintptr(&l.key, v, v|locked) {
-				return
+				return//获取到锁了，立刻返回
 			}
 			i = 0
 		}
 		if i < spin {
-			procyield(active_spin_cnt)
+			procyield(active_spin_cnt)//执行30次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
 		} else if i < spin+passive_spin {
-			osyield()
+			osyield()//挂起当前线程1us
 		} else {
 			// Someone else has it.
 			// l->waitm points to a linked list of M's waiting
 			// for this lock, chained through m->nextwaitm.
 			// Queue this M.
+			// 其他m持有着该l锁，l.waitm指向等待该锁的m的链表，通过m.nextwaitm链接起来
+			// 把本m加入链表里
 			for {
 				gp.m.nextwaitm = muintptr(v &^ locked)
 				if atomic.Casuintptr(&l.key, v, uintptr(unsafe.Pointer(gp.m))|locked) {
 					break
 				}
 				v = atomic.Loaduintptr(&l.key)
-				if v&locked == 0 {
+				if v&locked == 0 {//解锁了，再次尝试获取锁
 					continue Loop
 				}
 			}
-			if v&locked != 0 {
-				// Queued. Wait.
-				semasleep(-1)
+			if v&locked != 0 {//还没解锁
+				// Queued. Wait. 则把本线程进入阻塞队列，等待被其他线程唤醒
+				semasleep(-1)//把当前线程挂起休眠，直到有其他线程调用semawakeup唤醒
 				i = 0
 			}
 		}

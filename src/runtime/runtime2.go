@@ -560,7 +560,7 @@ type m struct {
 	mallocing     int32
 	throwing      int32
 	preemptoff    string // 该字段不等于空字符串的话，要保持 curg 始终在这个 m 上运行 // if != "", keep curg running on this m
-	locks         int32
+	locks         int32 // 大于0，则表示当前m被锁起
 	dying         int32
 	profilehz     int32
 	spinning      bool // 为 true 时表示当前 m 处于自旋状态，表示当前工作线程正在试图从其它工作线程的本地运行队列偷取goroutine 或 检查netpoller 或 gc // m is out of work and is actively looking for work
@@ -583,7 +583,7 @@ type m struct {
 	createstack   [32]uintptr // 创建此线程的栈 stack that created this thread.
 	lockedExt     uint32      // tracking for external LockOSThread
 	lockedInt     uint32      // tracking for internal lockOSThread
-	nextwaitm     muintptr    // next m waiting for lock
+	nextwaitm     muintptr    // 指向下一个等待锁的m，是一个链表结构 next m waiting for lock
 	waitunlockf   func(*g, unsafe.Pointer) bool
 	waitlock      unsafe.Pointer
 	waittraceev   byte
@@ -614,7 +614,7 @@ type m struct {
 
 	dlogPerM
 
-	mOS
+	mOS//对m所在线程的操作字段，有线程的互斥锁，线程的信号量等
 
 	// Up to 10 locks held by this m, maintained by the lock ranking code.
 	locksHeldLen int
@@ -790,7 +790,7 @@ type schedt struct {
 	ngsys uint32 // 系统协程的数量 number of system goroutines; updated atomically
 
 	pidle      puintptr // 由空闲的p结构体对象组成的链表 idle p's
-	npidle     uint32   // 空闲的p结构体对象的数量
+	npidle     uint32   // 空闲p的数量
 	nmspinning uint32 // See "Worker thread parking/unparking" comment in proc.go.
 
 	// Global runnable queue.

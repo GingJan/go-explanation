@@ -6232,10 +6232,10 @@ func sync_runtime_canSpin(i int) bool {
 	// GOMAXPROCS>1 and there is at least one other running P and local runq is empty.
 	// As opposed to runtime mutex we don't do passive spinning here,
 	// because there can be work on global runq or on other Ps.
-	if i >= active_spin || ncpu <= 1 || gomaxprocs <= int32(sched.npidle+sched.nmspinning)+1 {
+	if i >= active_spin || ncpu <= 1 || gomaxprocs <= int32(sched.npidle+sched.nmspinning)+1 {//i>4 或 cpu核心个数 <= 1 或 有空闲的p和m时，则不能自旋
 		return false
 	}
-	if p := getg().m.p.ptr(); !runqempty(p) {
+	if p := getg().m.p.ptr(); !runqempty(p) {//p的本地g队列不为空，则不能自旋
 		return false
 	}
 	return true
@@ -6244,7 +6244,7 @@ func sync_runtime_canSpin(i int) bool {
 //go:linkname sync_runtime_doSpin sync.runtime_doSpin
 //go:nosplit
 func sync_runtime_doSpin() {
-	procyield(active_spin_cnt)
+	procyield(active_spin_cnt)//执行cycles次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
 }
 
 var stealOrder randomOrder
