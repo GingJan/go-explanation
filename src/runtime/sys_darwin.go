@@ -445,6 +445,14 @@ func pthread_cond_init_trampoline()
 
 //go:nosplit
 //go:cgo_unsafe_args
+// pthread_cond_wait内部流程是这样的
+// 1.把调用它的线程1放入阻塞队列，
+// 2.为pthreadmutex互斥锁解锁
+// 3.进入休眠态，等待pthreadcond信号的触发
+// 此时，因为pthreadmutex已解锁，其他抢pthreadmutex的线程会被唤醒去竞争该锁
+// 假如线程2调用pthread_cond_signal() 或 pthread_cond_broadcast() 对等待pthreadcond信号的线程发出信号
+// 4.线程1被唤醒，尝试获取pthreadmutex锁，获取不到则继续阻塞等待
+// 5.获取到锁，则返回return到调用者
 func pthread_cond_wait(c *pthreadcond, m *pthreadmutex) int32 {
 	ret := libcCall(unsafe.Pointer(abi.FuncPCABI0(pthread_cond_wait_trampoline)), unsafe.Pointer(&c))
 	KeepAlive(c)
