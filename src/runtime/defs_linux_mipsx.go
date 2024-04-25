@@ -54,7 +54,7 @@ const (
 	_SIGCHLD   = 0x12
 	_SIGPWR    = 0x13
 	_SIGWINCH  = 0x14
-	_SIGURG    = 0x15
+	_SIGURG    = 0x15//21=》SIGTTIN=》Stop
 	_SIGIO     = 0x16
 	_SIGSTOP   = 0x17
 	_SIGTSTP   = 0x18

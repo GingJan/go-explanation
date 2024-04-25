@@ -210,7 +210,7 @@ func (fd *FD) incref() error {
 // is no remaining reference.
 func (fd *FD) decref() error {
 	if fd.fdmu.decref() {
-		return fd.destroy()
+		return fd.destroy()//关闭底层fd
 	}
 	return nil
 }

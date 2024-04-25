@@ -52,7 +52,9 @@ func (fd *netFD) closeWrite() error {
 }
 
 func (fd *netFD) Read(p []byte) (n int, err error) {
-	n, err = fd.pfd.Read(p)
+	n, err = fd.pfd.Read(p)//协程被阻塞在这
+
+	//协程被唤醒
 	runtime.KeepAlive(fd)
 	return n, wrapSyscallError(readSyscallName, err)
 }
@@ -93,7 +95,7 @@ func (fd *netFD) readMsgInet6(p []byte, oob []byte, flags int, sa *syscall.Socka
 }
 
 func (fd *netFD) Write(p []byte) (nn int, err error) {
-	nn, err = fd.pfd.Write(p)
+	nn, err = fd.pfd.Write(p)//会挂起当前协程
 	runtime.KeepAlive(fd)
 	return nn, wrapSyscallError(writeSyscallName, err)
 }

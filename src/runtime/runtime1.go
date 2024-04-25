@@ -472,7 +472,7 @@ func acquirem() *m {
 
 //go:nosplit
 func releasem(mp *m) {
-	_g_ := getg() //获取当前g（goroutine）
+	_g_ := getg() //g0
 	mp.locks--
 	if mp.locks == 0 && _g_.preempt {
 		// restore the preemption request in case we've cleared it in newstack

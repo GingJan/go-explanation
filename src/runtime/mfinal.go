@@ -464,6 +464,7 @@ okarg:
 // Note: KeepAlive should only be used to prevent finalizers from
 // running prematurely. In particular, when used with unsafe.Pointer,
 // the rules for valid uses of unsafe.Pointer still apply.
+// 该函数把参数x标记为可触达的，以确保在调用KeepAlive之前，x没被释放，x的finalizer也还没运行
 func KeepAlive(x any) {
 	// Introduce a use of x that the compiler can't eliminate.
 	// This makes sure x is alive on entry. We need x to be alive

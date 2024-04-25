@@ -471,9 +471,9 @@ func sysargs(argc int32, argv **byte) {
 		executablePath = executablePath[len(prefix):]
 	}
 }
-
+//向m所绑定的系统线程发送一个sig信号
 func signalM(mp *m, sig int) {
-	pthread_kill(pthread(mp.procid), uint32(sig))
+	pthread_kill(pthread(mp.procid), uint32(sig))//向线程id=mp.procid的系统线程发送sig信号
 }
 
 // sigPerThreadSyscall is only used on linux, so we assign a bogus signal

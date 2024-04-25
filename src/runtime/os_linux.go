@@ -378,7 +378,7 @@ func mpreinit(mp *m) {
 	mp.gsignal.m = mp
 }
 
-func gettid() uint32
+func gettid() uint32//Linux库提供的函数，返回的ID就是"线程"(轻量级进程)ID，相当于内核线程ID
 
 // Called to initialize a new m (including the bootstrap m).
 // Called on the new thread, cannot allocate memory.

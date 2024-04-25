@@ -137,7 +137,7 @@ const (
 
 	// Goroutine preemption request. goroutine的抢占请求
 	// 0xfffffade in hex.
-	stackPreempt = uintptrMask & -1314
+	stackPreempt = uintptrMask & -1314//当在栈扩展时，g.stackguard0字段等于该值则代表当前g要被抢占
 
 	// Thread is forking. Causes a split stack check failure.
 	// 0xfffffb2e in hex.

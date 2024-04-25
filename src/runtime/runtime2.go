@@ -544,7 +544,7 @@ type m struct {
 	_       uint32 // align next field to 8 bytes
 
 	// Fields not known to debuggers.
-	procid        uint64            // for debuggers, but offset not hard-coded
+	procid        uint64            // 系统线程的id for debuggers, but offset not hard-coded
 	gsignal       *g                // signal-handling g
 	goSigStack    gsignalStack      // Go-allocated signal handling stack
 	sigmask       sigset            // storage for saved signal mask
@@ -610,7 +610,7 @@ type m struct {
 
 	// Whether this is a pending preemption signal on this M.
 	// Accessed atomically.
-	signalPending uint32
+	signalPending uint32//
 
 	dlogPerM
 
@@ -625,7 +625,7 @@ type p struct {
 	id          int32
 	status      uint32 // one of pidle/prunning/...
 	link        puintptr
-	schedtick   uint32     // 每次被调度器调用时，都会自增incremented on every scheduler call
+	schedtick   uint32     // 每次被调度器调用时，都会自增 incremented on every scheduler call
 	syscalltick uint32     // 每次p发起系统调用，都会自增 incremented on every system call
 	sysmontick  sysmontick // 上次被sysmon调度的次数/时间信息last tick observed by sysmon
 	m           muintptr   // 当前关联的m back-link to associated m (nil if idle)
@@ -762,7 +762,7 @@ type p struct {
 
 	// preempt is set to indicate that this P should be enter the
 	// scheduler ASAP (regardless of what G is running on it).
-	preempt bool
+	preempt bool//标记是否应该尽快进入调度器（无视当前运行的g）
 
 	// Padding is no longer needed. False sharing is now not a worry because p is large enough
 	// that its size class is an integer multiple of the cache line size (for any of our architectures).

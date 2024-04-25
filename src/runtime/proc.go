@@ -865,7 +865,7 @@ func ready(gp *g, traceskip int, next bool) {
 	status := readgstatus(gp)
 
 	// Mark runnable.
-	_g_ := getg()
+	_g_ := getg()//g0
 	mp := acquirem() // disable preemption because it can be holding p in a local var
 	if status&^_Gscan != _Gwaiting {
 		dumpgstatus(gp)
@@ -874,8 +874,8 @@ func ready(gp *g, traceskip int, next bool) {
 
 	// status is Gwaiting or Gscanwaiting, make Grunnable and put on runq
 	casgstatus(gp, _Gwaiting, _Grunnable)
-	runqput(_g_.m.p.ptr(), gp, next)//把gp放入当前g所在p的本地队列里
-	wakep()
+	runqput(_g_.m.p.ptr(), gp, next)//把gp放入当前p的本地队列里
+	wakep()//尝试调度空闲的p来执行gp
 	releasem(mp)
 }
 
@@ -3146,7 +3146,7 @@ func injectglist(glist *gList) {
 	}
 
 	pp := getg().m.p.ptr()
-	//当前g是g0
+	//当前m是m0，则
 	if pp == nil {
 		//把q全部的g都放入到全局队列
 		lock(&sched.lock)
@@ -4100,7 +4100,7 @@ func syscall_runtime_AfterForkInChild() {
 // pendingPreemptSignals is the number of preemption signals
 // that have been sent but not received. This is only used on Darwin.
 // For #41702.
-// 那些已发送但还未被接收的抢占信息的个数
+// 那些已发送但还未被接收的抢占请求的个数
 var pendingPreemptSignals uint32
 
 // Called from syscall package before Exec.
@@ -5166,7 +5166,8 @@ var forcegcperiod int64 = 2 * 60 * 1e9
 var needSysmonWorkaround bool = false
 
 // Always runs without a P, so write barriers are not allowed.
-// 运行系统监控sysmon线程，无数绑定P执行，它是上帝函数，负责调度sched和其他goroutine的执行
+// 运行系统监控sysmon线程，无需绑定P执行，它是上帝函数，负责调度sched和其他goroutine的执行
+// 通过暂停线程运行的方式，实现暂停运行时长超过10ms的g，把p释放出来执行其他g
 //go:nowritebarrierrec
 func sysmon() {
 	lock(&sched.lock)
@@ -5176,18 +5177,18 @@ func sysmon() {
 
 	lasttrace := int64(0)
 	idle := 0 // how many cycles in succession we had not wokeup somebody
-	delay := uint32(0)
+	delay := uint32(0)//微秒
 
-	for {//系统监控sysmon循环执行，每次睡眠delay
-		if idle == 0 { // start with 20us sleep...
+	for {//系统监控sysmon循环执行，每次睡眠delay微秒
+		if idle == 0 { // 睡眠时长从20微秒开始
 			delay = 20
-		} else if idle > 50 { // start doubling the sleep after 1ms...
+		} else if idle > 50 { // 当睡眠时长大于1毫秒（50*20us=1000us）后，下一次睡眠时长则翻倍 start doubling the sleep after 1ms...
 			delay *= 2
 		}
-		if delay > 10*1000 { // up to 10ms
+		if delay > 10*1000 { // 最高睡眠时长为10毫秒
 			delay = 10 * 1000
 		}
-		usleep(delay)
+		usleep(delay)//进入睡眠
 
 		// sysmon should not enter deep sleep if schedtrace is enabled so that
 		// it can print that information at the right time.
@@ -5252,7 +5253,9 @@ func sysmon() {
 		// 如果超过10ms没轮询网络，则轮询一次
 		lastpoll := int64(atomic.Load64(&sched.lastpoll))//上次调用netpoll的时间点
 		if netpollinited() && lastpoll != 0 && lastpoll+10*1000*1000 < now {//已经有10ms没调用netpoll了
-			atomic.Cas64(&sched.lastpoll, uint64(lastpoll), uint64(now))//更新netpoll本次调用时间点
+			//更新netpoll本次调用时间点
+			atomic.Cas64(&sched.lastpoll, uint64(lastpoll), uint64(now))
+
 			list := netpoll(0) // non-blocking - returns list of goroutines 非阻塞，返回有网络数据就绪的goroutine列表
 			if !list.empty() {
 				// Need to decrement number of idle locked M's
@@ -5294,9 +5297,9 @@ func sysmon() {
 		}
 		// retake P's blocked in syscalls
 		// and preempt long running G's
-		if retake(now) != 0 {
-			idle = 0
-		} else {
+		if retake(now) != 0 {//扫描每个p，判断p上是否有运行超过10ms的g，并执行抢占逻辑
+			idle = 0//有发起系统调用的p，则sysmon休眠的时间不能太长，以便能立即响应
+		} else {//无发起系统调用的p，sysmon可休眠长一点
 			idle++
 		}
 		// check if we need to force a GC
@@ -5317,20 +5320,20 @@ func sysmon() {
 }
 
 type sysmontick struct {//每个P都会存着一个sysmontick
-	schedtick   uint32//处理器的调度次数
-	schedwhen   int64//处理器P上次调度时间
+	schedtick   uint32//处理器p被调度的次数
+	schedwhen   int64//处理器P上次被调度的时间点，用以判断某个g是否长时间占用p
 	syscalltick uint32//系统调用的次数
 	syscallwhen int64//系统调用的时间
 }
 
 // forcePreemptNS is the time slice given to a G before it is
 // preempted.
-const forcePreemptNS = 10 * 1000 * 1000 // 10ms
+const forcePreemptNS = 10 * 1000 * 1000 // 10ms = 1000w ns
 //对全部p进行遍历，更新每个p的被调度次数和最新被调度时间
 //当p处于运行中时，会判断在距离上次被调度时长是否超过10ms，（每次被调度时，p的调度时间都会被更新，通过此方式来判断某个g是否长时间占用p）
 //是则把此时p上运行的g标记为可被抢占，并停止g
 //若p因g而处于系统调用态，则抢占g，同时把m与p解绑，让出p去执行其他g，m则和g继续等待系统调用
-// 本函数总的是让p能够释放出来去执行更多g，以防被系统调用或长时间占用
+// 本抢占函数让p释放出来去执行其他g，以防被系统调用或被某个g长时间占用
 func retake(now int64) uint32 {
 	n := 0
 	// Prevent allp slice changes. This lock will be completely
@@ -5347,22 +5350,22 @@ func retake(now int64) uint32 {
 			continue
 		}
 		pd := &_p_.sysmontick
-		s := _p_.status
+		s := _p_.status//该p当前所在的状态
 		sysretake := false
-		if s == _Prunning || s == _Psyscall {
+		if s == _Prunning || s == _Psyscall {//p在运行中或系统调用中
 			// Preempt G if it's running for too long.
 			t := int64(_p_.schedtick)
 			if int64(pd.schedtick) != t {
 				pd.schedtick = uint32(t)
-				pd.schedwhen = now
+				pd.schedwhen = now//记录本次被调度的时间点
 			} else if pd.schedwhen+forcePreemptNS <= now {//当前g的运行时长超过10ms
-				preemptone(_p_)//对当前g进行标记为可被抢占
+				preemptone(_p_)//对当前g进行标记为可被抢占，并把m当前对应的系统线程暂停，只有这样，运行超过10ms的g才能停止
 				// In case of syscall, preemptone() doesn't
 				// work, because there is no M wired to P.
 				sysretake = true
 			}
 		}
-		if s == _Psyscall {
+		if s == _Psyscall {//当p处于系统调用态时，意味着g发起系统调用，因此p要和该g和m解绑
 			// Retake P from syscall if it's there for more than 1 sysmon tick (at least 20us).
 			t := int64(_p_.syscalltick)
 			if !sysretake && int64(pd.syscalltick) != t {
@@ -5373,7 +5376,7 @@ func retake(now int64) uint32 {
 			// On the one hand we don't want to retake Ps if there is no other work to do,
 			// but on the other hand we want to retake them eventually
 			// because they can prevent the sysmon thread from deep sleep.
-			// 当p的本地队列为空 且 有空闲p或自旋m时 且 p上次系统调用时间未过10ms，则不处理本p
+			// 当本p的本地队列为空 且 有空闲p或自旋m时 且 本p距离上次系统调用时间未过10ms，则不抢占当前在本p上运行的g
 			if runqempty(_p_) && atomic.Load(&sched.nmspinning)+atomic.Load(&sched.npidle) > 0 && pd.syscallwhen+10*1000*1000 > now {
 				continue
 			}
@@ -5384,14 +5387,14 @@ func retake(now int64) uint32 {
 			// Otherwise the M from which we retake can exit the syscall,
 			// increment nmidle and report deadlock.
 			incidlelocked(-1)
-			if atomic.Cas(&_p_.status, s, _Pidle) {//把p从 系统调用 状态改为 空闲 状态，以便p可执行其他g
+			if atomic.Cas(&_p_.status, s, _Pidle) {//把p从 系统调用状态 改为 空闲状态，以便p可执行其他g
 				if trace.enabled {
 					traceGoSysBlock(_p_)
 					traceProcStop(_p_)
 				}
 				n++
 				_p_.syscalltick++
-				handoffp(_p_)
+				handoffp(_p_)//从locked M 或 系统调用里，释放p，此时m和p解绑，m和g继续等待系统调用，p则可去执行其他g
 			}
 			incidlelocked(1)
 			lock(&allpLock)
@@ -5435,14 +5438,15 @@ func preemptall() bool {
 // 让p上正在运行的g停下来，该函数只是尽量尝试，它可能未通知goroutine，或通知了一个错误的goroutine，即使通知了正确的goroutine，当该goroutine在执行newstack栈扩展时，可能会忽略通知
 // 调用前无需持有锁
 // 如果通知发送出去了，则返回true
-// 真正的抢占行为会在某个时间点发送
+// 真正的抢占行为会在稍后某个时间点执行
+// 本函数只是通过把g的preemt和stackguard0设上抢占标识，并通过暂停系统线程的方式，暂停该g的运行
 func preemptone(_p_ *p) bool {
 	mp := _p_.m.ptr()
 	if mp == nil || mp == getg().m {
 		return false
 	}
 	gp := mp.curg
-	if gp == nil || gp == mp.g0 {
+	if gp == nil || gp == mp.g0 {//g0不可被抢占
 		return false
 	}
 
@@ -5817,6 +5821,8 @@ const randomizeScheduler = raceenabled
 // If next is true, runqput puts g in the _p_.runnext slot.
 // If the run queue is full, runnext puts g on the global queue.
 // Executed only by the owner P.
+// 尝试把g放入本地队列，如果next=false，则把g放入队尾，如果true，则放到p.runnext字段
+// 如果队列满了，则放入到全局队列
 func runqput(_p_ *p, gp *g, next bool) {
 	if randomizeScheduler && next && fastrandn(2) == 0 {
 		next = false
@@ -5832,7 +5838,7 @@ func runqput(_p_ *p, gp *g, next bool) {
 			return
 		}
 		// Kick the old runnext out to the regular run queue.
-		gp = oldnext.ptr()
+		gp = oldnext.ptr()//把原runnext的g放入到本地队列
 	}
 
 retry:
@@ -5843,7 +5849,7 @@ retry:
 		atomic.StoreRel(&_p_.runqtail, t+1) // store-release, makes the item available for consumption
 		return
 	}
-	if runqputslow(_p_, gp, h, t) {
+	if runqputslow(_p_, gp, h, t) {//把gp和本地队列一部分g放入到全局队列
 		return
 	}
 	// the queue is not full, now the put above must succeed
@@ -5852,6 +5858,7 @@ retry:
 
 // Put g and a batch of work from local runnable queue on global queue.
 // Executed only by the owner P.
+// 把g和本地一部分g放入到全局队列（一般情况下是因为p的本地队列满了）
 func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
 	var batch [len(_p_.runq)/2 + 1]*g
 

@@ -412,7 +412,7 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 	pd.wseq++
 	var rg, wg *g
 	pd.publishInfo()
-	rg = netpollunblock(pd, 'r', false)
+	rg = netpollunblock(pd, 'r', false)//返回阻塞在该pd上等待read的g
 	wg = netpollunblock(pd, 'w', false)
 	if pd.rt.f != nil {
 		deltimer(&pd.rt)

@@ -29,7 +29,7 @@ type FD struct {
 	iovecs *[]syscall.Iovec
 
 	// Semaphore signaled when file is closed.
-	csema uint32
+	csema uint32//当文件被关闭时，该信号量就会发出信号
 
 	// Non-zero if this file has been set to blocking mode.
 	isBlocking uint32
@@ -103,11 +103,11 @@ func (fd *FD) Close() error {
 	// the final decref will close fd.sysfd. This should happen
 	// fairly quickly, since all the I/O is non-blocking, and any
 	// attempts to block in the pollDesc will return errClosing(fd.isFile).
-	fd.pd.evict()
+	fd.pd.evict()//唤醒所有阻塞在该fd上的g
 
 	// The call to decref will call destroy if there are no other
 	// references.
-	err := fd.decref()
+	err := fd.decref()//如果该fd已无其他引用，则会关闭底层的fd
 
 	// Wait until the descriptor is closed. If this was the only
 	// reference, it is already closed. Only wait if the file has
@@ -167,7 +167,7 @@ func (fd *FD) Read(p []byte) (int, error) {
 		if err != nil {
 			n = 0
 			if err == syscall.EAGAIN && fd.pd.pollable() {
-				if err = fd.pd.waitRead(fd.isFile); err == nil {
+				if err = fd.pd.waitRead(fd.isFile); err == nil {//go会在这挂起，直到有网络事件
 					continue
 				}
 			}
