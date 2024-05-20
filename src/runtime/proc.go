@@ -10,6 +10,7 @@ import (
 	"internal/goarch"
 	"runtime/internal/atomic"
 	"runtime/internal/sys"
+	"std/internal/goos"
 	"unsafe"
 )
 
@@ -111,7 +112,7 @@ var modinfo string
 //   workers.
 
 var (
-	m0           m // 代表进程的主线程
+	m0           m // 代表系统进程的主线程
 	g0           g // m0的g0，也就是m0.g0 = &g0
 	mcache0      *mcache
 	raceprocctx0 uintptr
@@ -797,7 +798,10 @@ func mReserveID() int64 {
 	return id
 }
 
-// Pre-allocated ID may be passed as 'id', or omitted by passing -1.
+// Pre-allocated ID may be passed as 'id', or omitted by passing -1.、
+// id参数为预分配的m标识，默认传入-1
+// mcommoninit 初始化新m，主要逻辑有
+// 1.设置新m的标识；2.创建用于信号处理的gsignal
 func mcommoninit(mp *m, id int64) {
 	_g_ := getg()
 
@@ -811,7 +815,7 @@ func mcommoninit(mp *m, id int64) {
 	if id >= 0 {
 		mp.id = id
 	} else {
-		mp.id = mReserveID()
+		mp.id = mReserveID() // 返回下一个ID，用于作为新m的标识
 	}
 
 	lo := uint32(int64Hash(uint64(mp.id), fastrandseed))
@@ -1355,7 +1359,7 @@ func mStackIsSystemAllocated() bool {
 
 // mstart is the entry-point for new Ms.
 // It is written in assembly, uses ABI0, is marked TOPFRAME, and calls mstart0.
-// mstart 是新M的入口，使用汇编实现，内部调用 mstart0
+// mstart方法是新M的入口，使用汇编实现，内部其实是调用 mstart0
 func mstart()
 
 // mstart0 is the Go entry-point for new Ms.
@@ -1365,13 +1369,15 @@ func mstart()
 // May run during STW (because it doesn't have a P yet), so write
 // barriers are not allowed.
 //
+// mstart0方法是新建M的go程序入口，
+// 可能在STW期间运行（因为此时该M还未绑有P），所以是不允许进行写屏障的
 //go:nosplit
 //go:nowritebarrierrec
 func mstart0() {
 	_g_ := getg()//m0的g0
 
 	osStack := _g_.stack.lo == 0
-	if osStack {
+	if osStack { //当从0开始分配栈空间时，说明当前_g_是g0
 		// Initialize stack bounds from system stack.
 		// Cgo may have left stack size in stack.hi.
 		// minit may update the stack bounds.
@@ -1380,15 +1386,18 @@ func mstart0() {
 		// We set hi to &size, but there are things above
 		// it. The 1024 is supposed to compensate this,
 		// but is somewhat arbitrary.
+		// 在系统栈里初始化go栈的边界，Cgo 可能已经在 stack.hi 中留下了栈大小的信息，minit函数可能会更新该栈的边界
+		// 注意：这些边界可能不太精确，把stack.hi设置为size值，但是依然可能有超过size值的内容存在这里，所以1024这个值也是随意定的。
 		size := _g_.stack.hi
 		if size == 0 {
 			size = 8192 * sys.StackGuardMultiplier
 		}
-		_g_.stack.hi = uintptr(noescape(unsafe.Pointer(&size)))
-		_g_.stack.lo = _g_.stack.hi - size + 1024
+		_g_.stack.hi = uintptr(noescape(unsafe.Pointer(&size))) // 栈底
+		_g_.stack.lo = _g_.stack.hi - size + 1024 // 栈顶
 	}
 	// Initialize stack guard so that we can start calling regular
 	// Go code.
+	// 初始化栈的guard，这样才能调用常规的Go代码
 	_g_.stackguard0 = _g_.stack.lo + _StackGuard
 	// This is the g0, so we can also call go:systemstack
 	// functions, which check stackguard1.
@@ -1408,10 +1417,10 @@ func mstart0() {
 // The go:noinline is to guarantee the getcallerpc/getcallersp below are safe,
 // so that we can set up g0.sched to return to the call of mstart1 above.
 //go:noinline
-func mstart1() {
+func mstart1() {//该函数只在g0运行
 	_g_ := getg()//启动过程时 _g_ = m0的g0
 
-	if _g_ != _g_.m.g0 {
+	if _g_ != _g_.m.g0 {//当前g不是g0时
 		throw("bad runtime·mstart")
 	}
 
@@ -1426,16 +1435,16 @@ func mstart1() {
 	_g_.sched.sp = getcallersp()//获取调用mstart1时的栈顶地址
 
 	asminit()
-	minit()
+	minit()//m初始化函数，用于填入当前系统线程id，在新线程上调用该函数
 
 	// Install signal handlers; after minit so that minit can
 	// prepare the thread to be able to handle the signals.
-	if _g_.m == &m0 {//启动时_g_.m是m0，所以会执行下面的mstartm0函数
-		mstartm0()
+	if _g_.m == &m0 {//启动时_g_.m是m0，_g_是g0，所以会执行下面的mstartm0函数
+		mstartm0() //启动m0
 	}
 
-	if fn := _g_.m.mstartfn; fn != nil {//初始化过程中fn == nil
-		fn()
+	if fn := _g_.m.mstartfn; fn != nil {//初始化过程中fn == nil，若当前线程非新线程时，fn为nil
+		fn()//调用线程的入口函数
 	}
 
 	if _g_.m != &m0 {// m0已经绑定了allp[0]，若当前m不是m0的话还没有p，所以需要获取一个p
@@ -1451,6 +1460,7 @@ func mstart1() {
 // running yet, so they'll be no-ops.
 //
 //go:yeswritebarrierrec
+// mstartm0 实现了 mstart1 函数只在m0上运行的那部分逻辑
 func mstartm0() {
 	// Create an extra M for callbacks on threads not created by Go.
 	// An extra M is also needed on Windows for callbacks created by
@@ -1733,9 +1743,9 @@ func allocm(_p_ *p, fn func(), id int64) *m {
 	// The caller owns _p_, but we may borrow (i.e., acquirep) it. We must
 	// disable preemption to ensure it is not stolen, which would make the
 	// caller lose ownership.
-	acquirem()//获取当前g所在的m
+	acquirem()//给当前g所绑定的m加一个占用计数
 
-	_g_ := getg()
+	_g_ := getg() //获取当前g
 	if _g_.m.p == 0 {//如果当前正在运行的g没有挂载的p，则说明是g0，那么就借用p来绑定g0的m（系统线程）
 		acquirep(_p_) // temporarily borrow p for mallocs in this function
 	}
@@ -1772,8 +1782,8 @@ func allocm(_p_ *p, fn func(), id int64) *m {
 		unlock(&sched.lock)
 	}
 
-	mp := new(m)
-	mp.mstartfn = fn//m的入口函数
+	mp := new(m) //新建一个m
+	mp.mstartfn = fn//设置m的入口函数
 	mcommoninit(mp, id)
 
 	// In case of cgo or Solaris or illumos or Darwin, pthread_create will make us a stack.
@@ -1901,6 +1911,8 @@ var earlycgocallback = []byte("fatal error: cgo callback before cgo call\n")
 // newextram allocates m's and puts them on the extra list.
 // It is called with a working local m, so that it can do things
 // like call schedlock and allocate.
+// newextram 创建一些m并把它们放到额外list里，本函数再本地的working m里被调用
+// 这样就能做一些如调用 schedlock和allocate的事情
 func newextram() {
 	c := atomic.Xchg(&extraMWaiters, 0)
 	if c > 0 {
@@ -1918,6 +1930,7 @@ func newextram() {
 }
 
 // oneNewExtraM allocates an m and puts it on the extra list.
+// oneNewExtraM 分配一个m并把它放到extra list里
 func oneNewExtraM() {
 	// Create extra goroutine locked to extra m.
 	// The goroutine is the context in which the cgo callback will run.

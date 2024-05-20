@@ -336,7 +336,7 @@ func minit() {
 		minitSignalStack()
 	}
 	minitSignalMask()
-	getg().m.procid = uint64(pthread_self())
+	getg().m.procid = uint64(pthread_self())//当当前系统线程id填入当前g所在m的procid字段
 }
 
 // Called from dropm to undo the effect of an minit.

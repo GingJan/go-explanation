@@ -69,7 +69,7 @@ const (
 	// to each stack below the usual guard area for OS-specific
 	// purposes like signal handling. Used on Windows, Plan 9,
 	// and iOS because they do not use a separate stack.
-	// 因为windows，plan9，iOS不使用栈分裂优化技术，本常量用于给每个栈添加额外的空间，这些空间可能用于如信号处理等
+	// 因为windows，plan9，iOS不使用栈分裂优化技术，本常量用于给每个栈添加额外的空间，这些空间可能用于操作系统特定目的如信号处理等
 	_StackSystem = goos.IsWindows*512*goarch.PtrSize + goos.IsPlan9*512 + goos.IsIos*goarch.IsArm64*1024
 
 	// The minimum size of stack used by Go code
@@ -100,6 +100,8 @@ const (
 	// The guard leaves enough room for one _StackSmall frame plus
 	// a _StackLimit chain of NOSPLIT calls plus _StackSystem
 	// bytes for the OS.
+	// _StackGuard 是一个指针，指向 stack 栈底之上（栈底在高地址）的几个字节
+	// _StackGuard 留有足够的空间给1个 _StackSmall 帧 加 一个NOSPLIT的 _StackLimit 链 加 操作系统的 _StackSystem 个字节
 	_StackGuard = 928*sys.StackGuardMultiplier + _StackSystem
 
 	// After a stack split check the SP is allowed to be this
@@ -109,6 +111,11 @@ const (
 
 	// The maximum number of bytes that a chain of NOSPLIT
 	// functions can use.
+	// 在一个程序中通过 NOSPLIT 标记的函数链，所能够使用的最大字节数
+	// （NOSPLIT 是一个编程术语，表示该函数不需要栈分裂（stack splitting），即在函数调用时不会动态增加栈空间）
+	// 在一个程序中，如果一系列函数都使用了 NOSPLIT 标记，并且在调用过程中没有发生栈分裂，那么这些函数链所能够使用的最大字节数是多少。
+	// a chain of NOSPLIT functions：指的是由多个使用了 NOSPLIT 标记的函数构成的一条链。这些函数在执行时不会触发栈的分裂操作。
+	// The maximum number of bytes that a chain of NOSPLIT functions can use：这部分指的是这条链中所有函数在执行过程中能够使用的最大字节数。
 	_StackLimit = _StackGuard - _StackSystem - _StackSmall
 )
 

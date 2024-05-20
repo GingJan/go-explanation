@@ -404,11 +404,12 @@ type libcall struct {
 // Stack describes a Go execution stack.
 // The bounds of the stack are exactly [lo, hi),
 // with no implicit data structures on either side.
-// Stack 描述go的执行栈，栈的边界是[lo,hi)，且两边都无隐含的数据结构
-// 用于记录goroutine使用的栈的起始和结束位置
+// Stack 用于描述go的执行栈，栈的边界是[lo,hi)，且两边都无隐含的数据结构
+// （用于记录goroutine使用的栈的起始、结束位置）
 type stack struct {
 	lo uintptr// 栈顶，低地址
 	hi uintptr// 栈低，高地址
+	// 一个栈空间，里面会被分为几段,低地址->高地址的内容是： lo -> stackguard0 -> hi
 }
 
 // heldLockInfo gives info on a held lock and the rank of that lock
@@ -425,12 +426,13 @@ type g struct {
 	// stackguard1 is the stack pointer compared in the C stack growth prologue.
 	// It is stack.lo+StackGuard on g0 and gsignal stacks.
 	// It is ~0 on other goroutine stacks, to trigger a call to morestackc (and crash).
+	// 用于描述真实栈内存地址：[stack.lo, stack.hi)
 	stack       stack   // offset known to runtime/cgo
 
 	// 用于栈的扩张和收缩检查，抢占标志
 	// 下面两个成员用于栈溢出检查，实现栈的自动伸缩，抢占调度也会用到stackguard0
-	stackguard0 uintptr // offset known to liblink 指向包含安全空间的栈顶（从g.stack.hi到g.stackguard0的空间都是本g的栈空间）
-	stackguard1 uintptr // offset known to liblink
+	stackguard0 uintptr // offset known to liblink 指向包含安全空间的栈顶（从 g .stack.hi 到 g. stackguard0 的空间都是本g的栈空间）
+	stackguard1 uintptr // offset known to liblink 该字段只有当g是g0或gsignal时才有值
 
 	_panic    *_panic // innermost panic - offset known to liblink
 	_defer    *_defer // innermost defer
@@ -537,14 +539,15 @@ const (
 
 type m struct {
 	// g0主要用来记录工作线程使用的栈信息，在执行调度代码时需要使用这个栈
-	// 执行用户goroutine代码时，使用用户goroutine自己的栈，调度时会发生栈的切换
+	// 执行用户goroutine代码时，使用「user goroutine」自己的栈，调度时会发生栈的切换
 	g0      *g     // 系统协程g0 goroutine with scheduling stack
 	morebuf gobuf  // gobuf arg to morestack
 	divmod  uint32 // div/mod denominator for arm - known to liblink
 	_       uint32 // align next field to 8 bytes
 
 	// Fields not known to debuggers.
-	procid        uint64            // 系统线程的id for debuggers, but offset not hard-coded
+	// 以下字段无法被调试器识别或访问
+	procid        uint64            // 系统线程的id， for debuggers, but offset not hard-coded
 	gsignal       *g                // signal-handling g
 	goSigStack    gsignalStack      // Go-allocated signal handling stack
 	sigmask       sigset            // storage for saved signal mask
@@ -560,7 +563,7 @@ type m struct {
 	mallocing     int32
 	throwing      int32
 	preemptoff    string // 该字段不等于空字符串的话，要保持 curg 始终在这个 m 上运行 // if != "", keep curg running on this m
-	locks         int32 // 大于0，则表示当前m被锁起
+	locks         int32 // 大于0，则表示当前m被锁起（被占用）
 	dying         int32
 	profilehz     int32
 	spinning      bool // 为 true 时表示当前 m 处于自旋状态，表示当前工作线程正在试图从其它工作线程的本地运行队列偷取goroutine 或 检查netpoller 或 gc // m is out of work and is actively looking for work

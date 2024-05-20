@@ -154,6 +154,7 @@ func raise_trampoline()
 
 //go:nosplit
 //go:cgo_unsafe_args
+// cgo函数，获取当前线程的线程ID
 func pthread_self() (t pthread) {
 	libcCall(unsafe.Pointer(abi.FuncPCABI0(pthread_self_trampoline)), unsafe.Pointer(&t))
 	return

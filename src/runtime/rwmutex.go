@@ -38,7 +38,7 @@ func (rw *rwmutex) rlock() {
 	acquirem()
 	if int32(atomic.Xadd(&rw.readerCount, 1)) < 0 {
 		// A writer is pending. Park on the reader queue.
-		systemstack(func() {
+		systemstack(func() {//本代码块在系统线程的栈里运行
 			lockWithRank(&rw.rLock, lockRankRwmutexR)
 			if rw.readerPass > 0 {
 				// Writer finished.
