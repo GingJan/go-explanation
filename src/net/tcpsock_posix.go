@@ -141,13 +141,13 @@ func (ln *TCPListener) accept() (*TCPConn, error) {
 		return nil, err
 	}
 	tc := newTCPConn(fd)
-	if ln.lc.KeepAlive >= 0 {
-		setKeepAlive(fd, true)
+	if ln.lc.KeepAlive >= 0 {//启用keepalive并且设置tcp心跳包的发送时间间隔
+		setKeepAlive(fd, true)//启用 TCP Keep-Alive
 		ka := ln.lc.KeepAlive
 		if ln.lc.KeepAlive == 0 {
 			ka = defaultTCPKeepAlive
 		}
-		setKeepAlivePeriod(fd, ka)
+		setKeepAlivePeriod(fd, ka)//设置 TCP Keep-Alive 探测报文（心跳包）发送间隔
 	}
 	return tc, nil
 }

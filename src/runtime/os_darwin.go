@@ -211,6 +211,7 @@ func goenvs() {
 }
 
 // May run with m.p==nil, so write barriers are not allowed.
+// 新建系统线程
 //go:nowritebarrierrec
 func newosproc(mp *m) {
 	stk := unsafe.Pointer(mp.g0.stack.hi)
@@ -254,6 +255,7 @@ func newosproc(mp *m) {
 }
 
 // glue code to call mstart from pthread_create.
+// 在 pthread_create 里调起 mstart
 func mstart_stub()
 
 // newosproc0 is a version of newosproc that can be called before the runtime
@@ -316,6 +318,9 @@ func libpreinit() {
 
 // Called to initialize a new m (including the bootstrap m).
 // Called on the parent thread (main thread in case of bootstrap), can allocate memory.
+// 被用于初始新建的M（包含新建的M0）
+// 在父线程调用（也即被bootstrap启动时的引导线程调用）
+// 本函数内会分配内存
 func mpreinit(mp *m) {
 	mp.gsignal = malg(32 * 1024) // OS X wants >= 8K
 	mp.gsignal.m = mp

@@ -14,7 +14,7 @@ import (
 // defaultTCPKeepAlive is a default constant value for TCPKeepAlive times
 // See golang.org/issue/31510
 const (
-	defaultTCPKeepAlive = 15 * time.Second
+	defaultTCPKeepAlive = 15 * time.Second//默认的TCP保活心跳包发送间隔
 )
 
 // A Dialer contains options for connecting to an address.
@@ -24,6 +24,8 @@ const (
 // is therefore equivalent to just calling the Dial function.
 //
 // It is safe to call Dialer's methods concurrently.
+// 本结构体含有连接指定地址的字段
+//
 type Dialer struct {
 	// Timeout is the maximum amount of time a dial will wait for
 	// a connect to complete. If Deadline is also set, it may fail
@@ -37,18 +39,21 @@ type Dialer struct {
 	// With or without a timeout, the operating system may impose
 	// its own earlier timeout. For instance, TCP timeouts are
 	// often around 3 minutes.
+	// 建立TCP连接的超时时长
 	Timeout time.Duration
 
 	// Deadline is the absolute point in time after which dials
 	// will fail. If Timeout is set, it may fail earlier.
 	// Zero means no deadline, or dependent on the operating system
 	// as with the Timeout option.
+	//
 	Deadline time.Time
 
 	// LocalAddr is the local address to use when dialing an
 	// address. The address must be of a compatible type for the
 	// network being dialed.
 	// If nil, a local address is automatically chosen.
+	// LocalAddr 本地地址
 	LocalAddr Addr
 
 	// DualStack previously enabled RFC 6555 Fast Fallback
@@ -77,6 +82,7 @@ type Dialer struct {
 	// system. Network protocols or operating systems that do
 	// not support keep-alives ignore this field.
 	// If negative, keep-alive probes are disabled.
+	// 本字段存放网络连接保活心跳包的时间间隔
 	KeepAlive time.Duration
 
 	// Resolver optionally specifies an alternate resolver to use.
@@ -95,6 +101,7 @@ type Dialer struct {
 	// Network and address parameters passed to Control method are not
 	// necessarily the ones passed to Dial. For example, passing "tcp" to Dial
 	// will cause the Control function to be called with "tcp4" or "tcp6".
+	// 该字段存放的函数在创建网络连接后，真正发出建立连接请求前被调用
 	Control func(network, address string, c syscall.RawConn) error
 }
 
@@ -120,7 +127,7 @@ func (d *Dialer) deadline(ctx context.Context, now time.Time) (earliest time.Tim
 		earliest = now.Add(d.Timeout)
 	}
 	if d, ok := ctx.Deadline(); ok {
-		earliest = minNonzeroTime(earliest, d)
+		earliest = minNonzeroTime(earliest, d)//谁最小取谁
 	}
 	return minNonzeroTime(earliest, d.Deadline)
 }
@@ -374,7 +381,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (Conn
 		panic("nil context")
 	}
 	deadline := d.deadline(ctx, time.Now())
-	if !deadline.IsZero() {
+	if !deadline.IsZero() {//设置/创建一个deadline ctx
 		if d, ok := ctx.Deadline(); !ok || deadline.Before(d) {
 			subCtx, cancel := context.WithDeadline(ctx, deadline)
 			defer cancel()
@@ -403,6 +410,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (Conn
 		resolveCtx = context.WithValue(resolveCtx, nettrace.TraceKey{}, &shadow)
 	}
 
+	//生成地址实例
 	addrs, err := d.resolver().resolveAddrList(resolveCtx, "dial", network, address, d.LocalAddr)
 	if err != nil {
 		return nil, &OpError{Op: "dial", Net: network, Source: nil, Addr: nil, Err: err}
@@ -410,8 +418,8 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (Conn
 
 	sd := &sysDialer{
 		Dialer:  *d,
-		network: network,
-		address: address,
+		network: network,//网络类型
+		address: address,//对端地址
 	}
 
 	var primaries, fallbacks addrList

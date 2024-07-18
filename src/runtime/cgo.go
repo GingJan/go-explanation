@@ -49,6 +49,7 @@ func cgoUse(any) { throw("cgoUse should not be called") }
 // The compiler cannot see that cgoAlwaysFalse is always false,
 // so it emits the test and keeps the call, giving the desired
 // escape analysis result. The test is cheaper than the call.
+// cgoAlwaysFalse 是一个总为false的布尔值
 var cgoAlwaysFalse bool
 
 var cgo_yield = &_cgo_yield

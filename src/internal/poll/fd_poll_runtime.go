@@ -28,6 +28,7 @@ func runtime_pollSetDeadline(ctx uintptr, d int64, mode int)
 func runtime_pollUnblock(ctx uintptr)
 func runtime_isPollServerDescriptor(fd uintptr) bool
 
+//是底层epoll的封装
 type pollDesc struct {
 	runtimeCtx uintptr
 }
@@ -36,7 +37,7 @@ var serverInit sync.Once
 
 func (pd *pollDesc) init(fd *FD) error {
 	serverInit.Do(runtime_pollServerInit)
-	ctx, errno := runtime_pollOpen(uintptr(fd.Sysfd))
+	ctx, errno := runtime_pollOpen(uintptr(fd.Sysfd))//底层是把fd对应的系统fd添加到epoll的监控队列里，ctx是代表fd的对象（该fd已被监听，使用了 runtime.pollDesc对象来代表被监听的fd）
 	if errno != 0 {
 		return errnoErr(syscall.Errno(errno))
 	}
@@ -44,22 +45,24 @@ func (pd *pollDesc) init(fd *FD) error {
 	return nil
 }
 
+//把pd.runtimeCtx底层的fd从监听队列移除，并归还底层runtime.pollDesc对象到复用池
 func (pd *pollDesc) close() {
 	if pd.runtimeCtx == 0 {
 		return
 	}
-	runtime_pollClose(pd.runtimeCtx)
+	runtime_pollClose(pd.runtimeCtx)//把pd.runtimeCtx底层的fd从监听队列移除，并归还底层runtime.pollDesc对象到复用池
 	pd.runtimeCtx = 0
 }
 
 // Evict evicts fd from the pending list, unblocking any I/O running on fd.
+// 把fd从等待队列里移除，同时解除在此fd上的所有阻塞
 func (pd *pollDesc) evict() {
 	if pd.runtimeCtx == 0 {
 		return
 	}
 	runtime_pollUnblock(pd.runtimeCtx)
 }
-
+//重置pd里面的字段
 func (pd *pollDesc) prepare(mode int, isFile bool) error {
 	if pd.runtimeCtx == 0 {
 		return nil

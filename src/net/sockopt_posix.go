@@ -114,9 +114,9 @@ func setWriteBuffer(fd *netFD, bytes int) error {
 }
 
 func setKeepAlive(fd *netFD, keepalive bool) error {
-	err := fd.pfd.SetsockoptInt(syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, boolint(keepalive))
+	err := fd.pfd.SetsockoptInt(syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, boolint(keepalive))//启用 TCP Keep-Alive
 	runtime.KeepAlive(fd)
-	return wrapSyscallError("setsockopt", err)
+	return wrapSyscallError("setsockopt", err)//启用失败的错误
 }
 
 func setLinger(fd *netFD, sec int) error {

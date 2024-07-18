@@ -13,14 +13,16 @@ import (
 )
 
 // smallBufferSize is an initial allocation minimal capacity.
+// smallBufferSize 初始分配最小容量值
 const smallBufferSize = 64
 
 // A Buffer is a variable-sized buffer of bytes with Read and Write methods.
 // The zero value for Buffer is an empty buffer ready to use.
+// Buffer是一个可变容量的buffer，Buffer的零值是一个空buffer
 type Buffer struct {
 	buf      []byte // contents are the bytes buf[off : len(buf)]
-	off      int    // read at &buf[off], write at &buf[len(buf)]
-	lastRead readOp // last read operation, so that Unread* can work correctly.
+	off      int    // 当前已读取数据的游标，从&buf[off]开始读取，从&buf[len(buf)]开始写入
+	lastRead readOp // 最后一次读操作，last read operation, so that Unread* can work correctly.
 }
 
 // The readOp constants describe the last action performed on
@@ -51,6 +53,7 @@ const maxInt = int(^uint(0) >> 1)
 // only until the next call to a method like Read, Write, Reset, or Truncate).
 // The slice aliases the buffer content at least until the next buffer modification,
 // so immediate changes to the slice will affect the result of future reads.
+// 返回buffer里剩下所有未读取的字节数据
 func (b *Buffer) Bytes() []byte { return b.buf[b.off:] }
 
 // String returns the contents of the unread portion of the buffer
@@ -70,10 +73,12 @@ func (b *Buffer) empty() bool { return len(b.buf) <= b.off }
 
 // Len returns the number of bytes of the unread portion of the buffer;
 // b.Len() == len(b.Bytes()).
+// 返回未读取字节数的长度
 func (b *Buffer) Len() int { return len(b.buf) - b.off }
 
 // Cap returns the capacity of the buffer's underlying byte slice, that is, the
 // total space allocated for the buffer's data.
+// 返回本Buffer的总容量
 func (b *Buffer) Cap() int { return cap(b.buf) }
 
 // Truncate discards all but the first n unread bytes from the buffer
@@ -94,6 +99,7 @@ func (b *Buffer) Truncate(n int) {
 // Reset resets the buffer to be empty,
 // but it retains the underlying storage for use by future writes.
 // Reset is the same as Truncate(0).
+// 重置buffer设为空
 func (b *Buffer) Reset() {
 	b.buf = b.buf[:0]
 	b.off = 0
@@ -114,31 +120,36 @@ func (b *Buffer) tryGrowByReslice(n int) (int, bool) {
 // grow grows the buffer to guarantee space for n more bytes.
 // It returns the index where bytes should be written.
 // If the buffer can't grow it will panic with ErrTooLarge.
+// 扩大n个字节的空间，返回写入位置的下标
+// 如果无法再扩大空间，返回 ErrTooLarge 错误
 func (b *Buffer) grow(n int) int {
-	m := b.Len()
+	m := b.Len()//未读取的字节数
 	// If buffer is empty, reset to recover space.
-	if m == 0 && b.off != 0 {
+	if m == 0 && b.off != 0 {//如果已有的数据已全部读走，则重置目前已分配有的空间
 		b.Reset()
 	}
 	// Try to grow by means of a reslice.
-	if i, ok := b.tryGrowByReslice(n); ok {
+	if i, ok := b.tryGrowByReslice(n); ok {//尝试重置下切片的空间，不申请新的内存空间
 		return i
 	}
-	if b.buf == nil && n <= smallBufferSize {
-		b.buf = make([]byte, n, smallBufferSize)
+	//无法通过重置已有空间实现，则进行新空间申请的逻辑
+
+	if b.buf == nil && n <= smallBufferSize {//本Buffer第一次申请空间
+		b.buf = make([]byte, n, smallBufferSize)//申请新的切片（新的内存空间）
 		return 0
 	}
-	c := cap(b.buf)
+	c := cap(b.buf)//当前已有的空间容量
 	if n <= c/2-m {
 		// We can slide things down instead of allocating a new
 		// slice. We only need m+n <= c to slide, but
 		// we instead let capacity get twice as large so we
 		// don't spend all our time copying.
-		copy(b.buf, b.buf[b.off:])
+		copy(b.buf, b.buf[b.off:])//通过在原切片调整的方式腾出n个字节空间
 	} else if c > maxInt-c-n {
 		panic(ErrTooLarge)
 	} else {
 		// Not enough space anywhere, we need to allocate.
+		// 需申请新内存空间
 		buf := makeSlice(2*c + n)
 		copy(buf, b.buf[b.off:])
 		b.buf = buf
@@ -165,6 +176,7 @@ func (b *Buffer) Grow(n int) {
 // Write appends the contents of p to the buffer, growing the buffer as
 // needed. The return value n is the length of p; err is always nil. If the
 // buffer becomes too large, Write will panic with ErrTooLarge.
+// 把p里的数据追加到Buffer里
 func (b *Buffer) Write(p []byte) (n int, err error) {
 	b.lastRead = opInvalid
 	m, ok := b.tryGrowByReslice(len(p))
@@ -196,12 +208,13 @@ const MinRead = 512
 // the buffer as needed. The return value n is the number of bytes read. Any
 // error except io.EOF encountered during the read is also returned. If the
 // buffer becomes too large, ReadFrom will panic with ErrTooLarge.
+// 从r里读取数据并放置到Buffer里
 func (b *Buffer) ReadFrom(r io.Reader) (n int64, err error) {
 	b.lastRead = opInvalid
 	for {
 		i := b.grow(MinRead)
 		b.buf = b.buf[:i]
-		m, e := r.Read(b.buf[i:cap(b.buf)])
+		m, e := r.Read(b.buf[i:cap(b.buf)])//把r里的数据读取到b.buf里
 		if m < 0 {
 			panic(errNegativeRead)
 		}
@@ -233,6 +246,7 @@ func makeSlice(n int) []byte {
 // The return value n is the number of bytes written; it always fits into an
 // int, but it is int64 to match the io.WriterTo interface. Any error
 // encountered during the write is also returned.
+// 把Buffer里的数据写入到w里
 func (b *Buffer) WriteTo(w io.Writer) (n int64, err error) {
 	b.lastRead = opInvalid
 	if nBytes := b.Len(); nBytes > 0 {
@@ -260,6 +274,7 @@ func (b *Buffer) WriteTo(w io.Writer) (n int64, err error) {
 // The returned error is always nil, but is included to match bufio.Writer's
 // WriteByte. If the buffer becomes too large, WriteByte will panic with
 // ErrTooLarge.
+// 把c写入到本Buffer里
 func (b *Buffer) WriteByte(c byte) error {
 	b.lastRead = opInvalid
 	m, ok := b.tryGrowByReslice(1)
@@ -294,6 +309,7 @@ func (b *Buffer) WriteRune(r rune) (n int, err error) {
 // is drained. The return value n is the number of bytes read. If the
 // buffer has no data to return, err is io.EOF (unless len(p) is zero);
 // otherwise it is nil.
+// 把Buffer里未读取的数据写入到p里
 func (b *Buffer) Read(p []byte) (n int, err error) {
 	b.lastRead = opInvalid
 	if b.empty() {

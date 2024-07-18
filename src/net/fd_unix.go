@@ -184,11 +184,11 @@ func (fd *netFD) accept() (netfd *netFD, err error) {
 		poll.CloseFunc(d)
 		return nil, err
 	}
-	if err = netfd.init(); err != nil {
+	if err = netfd.init(); err != nil {//epoll的创建 + 新连接fd（d变量）被添加到监听队列
 		netfd.Close()
 		return nil, err
 	}
-	lsa, _ := syscall.Getsockname(netfd.pfd.Sysfd)
+	lsa, _ := syscall.Getsockname(netfd.pfd.Sysfd)//Sysfd存放的是系统的fd标识
 	netfd.setAddr(netfd.addrFunc()(lsa), netfd.addrFunc()(rsa))
 	return netfd, nil
 }

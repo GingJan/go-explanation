@@ -192,7 +192,7 @@ func (rank lockRank) String() string {
 // So, for example, the lockRankSched entry shows that all the locks preceding
 // it in rank can actually be held. The allp lock shows that only the sysmon or
 // sched lock can be held immediately above it when it is acquired.
-var lockPartialOrder [][]lockRank = [][]lockRank{
+var lockPartialOrder [][]lockRank = [][]lockRank{//不同等级的锁的集合
 	lockRankDummy:         {},
 	lockRankSysmon:        {},
 	lockRankScavenge:      {lockRankSysmon},

@@ -49,6 +49,7 @@ func getg() *g
 //mcall(exitsyscall0)
 //mcall(preemptPark)
 //mcall(gopreempt_m)
+// 从g切换到g0栈，并且调用fn(g)，g是调用本函数mcall的用户协程g。
 func mcall(fn func(*g))
 
 // systemstack runs fn on a system stack.
@@ -68,11 +69,10 @@ func mcall(fn func(*g))
 //	})
 //	... use x ...
 //
-// 在系统线程的栈里运行fn函数
-// 调用该函数时，会从用户协程切换到g0系统协程
-// 如果本函数的调用者是在OS线程（即g0）栈里的 或 在信号处理（即gsignal）栈里的，
+// 在系统线程的栈里运行fn函数，调用该函数时，会从用户协程切换到g0系统协程
+// 如果本函数的调用者是在OS系统线程（即g0）栈里的 或 在信号处理（即gsignal）栈里的，
 // 则直接调用fn函数并返回
-// 否则，本函数的调用者就是来自受限制的常规goroutine栈里的，这种情况下，systemstack切换到OS线程栈里再调用fn函数
+// 否则，本函数的调用者就是来自受限的常规goroutine栈里的，这种情况下，systemstack会先切换到OS线程栈里再调用fn函数
 // 然后再切回常规goroutine栈
 // systemstack函数的作用是在系统栈中执行只能由g0(或gsignal)执行的调度代码，
 // 和mcall不同的是，在执行完调度代码后会切回到现在正在执行的代码。

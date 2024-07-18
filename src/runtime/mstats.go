@@ -18,11 +18,13 @@ import (
 //
 // Many of these fields are updated on the fly, while others are only
 // updated when updatememstats is called.
+// 统计结构体
+// 用于记录/统计本m所申请的资源
 type mstats struct {
 	// General statistics.
-	alloc       uint64 // bytes allocated and not yet freed
-	total_alloc uint64 // bytes allocated (even if freed)
-	sys         uint64 // bytes obtained from system (should be sum of xxx_sys below, no locking, approximate)
+	alloc       uint64 // 分配了的且未释放的内存空间（字节）bytes allocated and not yet freed
+	total_alloc uint64 // 总共分配的内存空间（含已释放的）（字节）bytes allocated (even if freed)
+	sys         uint64 // 从系统申请的内存空间（字节）bytes obtained from system (should be sum of xxx_sys below, no locking, approximate)
 	nlookup     uint64 // number of pointer lookups (unused)
 	nmalloc     uint64 // number of mallocs
 	nfree       uint64 // number of frees
@@ -664,6 +666,7 @@ func flushallmcaches() {
 // sysMemStat represents a global system statistic that is managed atomically.
 //
 // This type must structurally be a uint64 so that mstats aligns with MemStats.
+// sysMemStat 存放向系统申请的总内存数据（统计申请了多少内存）
 type sysMemStat uint64
 
 // load atomically reads the value of the stat.

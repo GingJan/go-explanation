@@ -17,7 +17,7 @@ var worldIsStopped uint32
 
 // lockRankStruct is embedded in mutex
 type lockRankStruct struct {
-	// static lock ranking of the lock
+	// 锁等级 static lock ranking of the lock
 	rank lockRank
 	// pad field to make sure lockRankStruct is a multiple of 8 bytes, even on
 	// 32-bit systems.
@@ -123,12 +123,14 @@ func acquireLockRank(rank lockRank) {
 //go:systemstack
 func checkRanks(gp *g, prevRank, rank lockRank) {
 	rankOK := false
-	if rank < prevRank {
+	if rank < prevRank {//新lock的等级 < 前lock的等级
 		// If rank < prevRank, then we definitely have a rank error
+		// 如果当前锁等级 < 前锁等级，那么必是等级错误
 		rankOK = false
-	} else if rank == lockRankLeafRank {
+	} else if rank == lockRankLeafRank {//新lokc是叶子锁
 		// If new lock is a leaf lock, then the preceding lock can
 		// be anything except another leaf lock.
+		// 如果 新的lock是 叶子锁（最小粒度的锁），那么前lock可以是除了叶子锁外的任何锁
 		rankOK = prevRank < lockRankLeafRank
 	} else {
 		// We've now verified the total lock ranking, but we

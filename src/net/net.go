@@ -102,9 +102,10 @@ var (
 // The two methods Network and String conventionally return strings
 // that can be passed as the arguments to Dial, but the exact form
 // and meaning of the strings is up to the implementation.
+// Addr 表示网络和端地址
 type Addr interface {
-	Network() string // name of the network (for example, "tcp", "udp")
-	String() string  // string form of address (for example, "192.0.2.1:25", "[2001:db8::1]:80")
+	Network() string // 网络类型，例如tcp、udp
+	String() string  // 地址的字符串形式（例如, "192.0.2.1:25", "[2001:db8::1]:80"）
 }
 
 // Conn is a generic stream-oriented network connection.
@@ -114,6 +115,7 @@ type Conn interface {
 	// Read reads data from the connection.
 	// Read can be made to time out and return an error after a fixed
 	// time limit; see SetDeadline and SetReadDeadline.
+	// Read 从网络连接里读取数据，可设为超时时长并在超时后返回错误
 	Read(b []byte) (n int, err error)
 
 	// Write writes data to the connection.
@@ -181,7 +183,7 @@ func (c *conn) Read(b []byte) (int, error) {
 		return 0, syscall.EINVAL
 	}
 	n, err := c.fd.Read(b)
-	if err != nil && err != io.EOF {
+	if err != nil && err != io.EOF {//出现系统层级错误
 		err = &OpError{Op: "read", Net: c.fd.net, Source: c.fd.laddr, Addr: c.fd.raddr, Err: err}
 	}
 	return n, err
@@ -201,7 +203,7 @@ func (c *conn) Write(b []byte) (int, error) {
 
 // Close closes the connection.
 func (c *conn) Close() error {
-	if !c.ok() {
+	if !c.ok() {//如果底层的fd已关闭
 		return syscall.EINVAL
 	}
 	err := c.fd.Close()

@@ -465,6 +465,19 @@ okarg:
 // running prematurely. In particular, when used with unsafe.Pointer,
 // the rules for valid uses of unsafe.Pointer still apply.
 // 该函数把参数x标记为可触达的，以确保在调用KeepAlive之前，x没被释放，x的finalizer也还没运行
+// 以下是本函数的使用场景
+// 	type File struct { d int }
+// 	d, err := syscall.Open("/file/path", syscall.O_RDONLY, 0)
+// 	// ... 写一些当 err != nil 时的逻辑 ...
+// 	p := &File{d}
+// 	runtime.SetFinalizer(p, func(p *File) { syscall.Close(p.d) })
+// 	var buf [10]byte
+// 	n, err := syscall.Read(p.d, buf[:])
+// 	// 确保p在Read返回前不会被finalized
+// 	runtime.KeepAlive(p)
+// 	// 从这里开始不会再使用p了
+//
+// 当不调用 KeepAlive 时，finalizer可在 syscall.Read 的启动时运行，并且在 syscall.Read 实际调用底层 系统调用 时关闭文件描述符
 func KeepAlive(x any) {
 	// Introduce a use of x that the compiler can't eliminate.
 	// This makes sure x is alive on entry. We need x to be alive

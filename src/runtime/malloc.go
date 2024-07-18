@@ -1373,10 +1373,10 @@ func nextSampleNoFP() uintptr {
 	}
 	return 0
 }
-
+//已向OS申请到的内存块
 type persistentAlloc struct {
-	base *notInHeap
-	off  uintptr
+	base *notInHeap//内存块的起始地址（相当于栈底）
+	off  uintptr//内存块已用地址（相当于栈顶）
 }
 
 var globalAlloc struct {
@@ -1386,12 +1386,13 @@ var globalAlloc struct {
 
 // persistentChunkSize is the number of bytes we allocate when we grow
 // a persistentAlloc.
+// 每次申请一个新的persistentAlloc内存块时，都申请persistentChunkSize个字节空间
 const persistentChunkSize = 256 << 10
 
 // persistentChunks is a list of all the persistent chunks we have
 // allocated. The list is maintained through the first word in the
 // persistent chunk. This is updated atomically.
-var persistentChunks *notInHeap
+var persistentChunks *notInHeap//内存块链表
 
 // Wrapper around sysAlloc that can allocate small chunks.
 // There is no associated free operation.
@@ -1402,10 +1403,10 @@ var persistentChunks *notInHeap
 // Consider marking persistentalloc'd types go:notinheap.
 func persistentalloc(size, align uintptr, sysStat *sysMemStat) unsafe.Pointer {
 	var p *notInHeap
-	systemstack(func() {
+	systemstack(func() {//在系统栈内存进行内存空间申请/分配
 		p = persistentalloc1(size, align, sysStat)
 	})
-	return unsafe.Pointer(p)
+	return unsafe.Pointer(p)//返回申请到的内存空间 的地址
 }
 
 // Must run on system stack because stack growth can (re)invoke it.
@@ -1436,24 +1437,24 @@ func persistentalloc1(size, align uintptr, sysStat *sysMemStat) *notInHeap {
 
 	mp := acquirem()
 	var persistent *persistentAlloc
-	if mp != nil && mp.p != 0 {
+	if mp != nil && mp.p != 0 {//当前线程M的P
 		persistent = &mp.p.ptr().palloc
 	} else {
 		lock(&globalAlloc.mutex)
 		persistent = &globalAlloc.persistentAlloc
 	}
 	persistent.off = alignUp(persistent.off, align)
-	if persistent.off+size > persistentChunkSize || persistent.base == nil {
-		persistent.base = (*notInHeap)(sysAlloc(persistentChunkSize, &memstats.other_sys))
-		if persistent.base == nil {
-			if persistent == &globalAlloc.persistentAlloc {
+	if persistent.off+size > persistentChunkSize || persistent.base == nil {//如果已有内存块的空间小于申请的size，或目前未申请内存块
+		persistent.base = (*notInHeap)(sysAlloc(persistentChunkSize, &memstats.other_sys))//则向系统申请内存
+		if persistent.base == nil {//如果向系统申请内存失败
+			if persistent == &globalAlloc.persistentAlloc {//则使用全局内存块
 				unlock(&globalAlloc.mutex)
 			}
 			throw("runtime: cannot allocate memory")
 		}
 
 		// Add the new chunk to the persistentChunks list.
-		for {
+		for {//把新申请的内存块放到persistentChunks链表里
 			chunks := uintptr(unsafe.Pointer(persistentChunks))
 			*(*uintptr)(unsafe.Pointer(persistent.base)) = chunks
 			if atomic.Casuintptr((*uintptr)(unsafe.Pointer(&persistentChunks)), chunks, uintptr(unsafe.Pointer(persistent.base))) {
@@ -1462,18 +1463,18 @@ func persistentalloc1(size, align uintptr, sysStat *sysMemStat) *notInHeap {
 		}
 		persistent.off = alignUp(goarch.PtrSize, align)
 	}
-	p := persistent.base.add(persistent.off)
-	persistent.off += size
-	releasem(mp)
+	p := persistent.base.add(persistent.off)//p=申请的内存地址
+	persistent.off += size//更新内存块的栈顶 off
+	releasem(mp)//释放占用的m
 	if persistent == &globalAlloc.persistentAlloc {
 		unlock(&globalAlloc.mutex)
 	}
 
 	if sysStat != &memstats.other_sys {
-		sysStat.add(int64(size))
+		sysStat.add(int64(size))//更新已向系统申请的内存统计数据
 		memstats.other_sys.add(-int64(size))
 	}
-	return p
+	return p//返回刚分配的内存空间 的地址
 }
 
 // inPersistentAlloc reports whether p points to memory allocated by

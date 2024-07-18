@@ -14,16 +14,17 @@ import (
 )
 
 // Network file descriptor.
+// 用于网络的文件描述符
 type netFD struct {
 	pfd poll.FD
 
 	// immutable until Close
 	family      int
-	sotype      int
+	sotype      int //socket type 有 syscall.SOCK_STREAM、SOCK_DGRAM、SOCK_RAW、SOCK_RDM、SOCK_SEQPACKET
 	isConnected bool // handshake completed or use of association with peer
 	net         string
-	laddr       Addr
-	raddr       Addr
+	laddr       Addr //本地地址
+	raddr       Addr //对端地址
 }
 
 func (fd *netFD) setAddr(laddr, raddr Addr) {
@@ -52,9 +53,9 @@ func (fd *netFD) closeWrite() error {
 }
 
 func (fd *netFD) Read(p []byte) (n int, err error) {
-	n, err = fd.pfd.Read(p)//协程被阻塞在这
+	n, err = fd.pfd.Read(p)//若没有数据，协程则被阻塞在这
 
-	//协程被唤醒
+	//若跑到这里，说明协程被唤醒，也即有数据了
 	runtime.KeepAlive(fd)
 	return n, wrapSyscallError(readSyscallName, err)
 }

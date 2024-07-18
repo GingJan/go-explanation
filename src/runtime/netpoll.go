@@ -69,6 +69,7 @@ const pollBlockSize = 4 * 1024
 // No heap pointers.
 //
 //go:notinheap
+// 网络poller描述符
 type pollDesc struct {
 	link *pollDesc // in pollcache, protected by pollcache.lock
 	fd   uintptr   // constant for pollDesc usage lifetime
@@ -95,7 +96,7 @@ type pollDesc struct {
 	rg atomic.Uintptr // pdReady, pdWait, G waiting for read or nil
 	wg atomic.Uintptr // pdReady, pdWait, G waiting for write or nil
 
-	lock    mutex // protects the following fields
+	lock    mutex // 保护下面字段的变动 protects the following fields
 	closing bool
 	user    uint32    // user settable cookie
 	rseq    uintptr   // protects from stale read timers
@@ -165,8 +166,8 @@ func (pd *pollDesc) setEventErr(b bool) {
 }
 
 type pollCache struct {
-	lock  mutex
-	first *pollDesc
+	lock  mutex // 保护下面字段的变动
+	first *pollDesc//多个poll对象通过链表方式链接
 	// PollDesc objects must be type-stable,
 	// because we can get ready notification from epoll/kqueue
 	// after the descriptor is closed/reused.
@@ -179,7 +180,7 @@ var (
 	netpollInited   uint32
 
 	pollcache      pollCache
-	netpollWaiters uint32
+	netpollWaiters uint32 //等待netpoll的协程数量
 )
 
 //go:linkname poll_runtime_pollServerInit internal/poll.runtime_pollServerInit
@@ -236,9 +237,9 @@ func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
 	pd.publishInfo()
 	unlock(&pd.lock)
 
-	errno := netpollopen(fd, pd)
-	if errno != 0 {
-		pollcache.free(pd)
+	errno := netpollopen(fd, pd)//把fd添加到pd（epoll）里
+	if errno != 0 {//添加过程出现错误，则
+		pollcache.free(pd)//归还pd到poll池
 		return nil, int(errno)
 	}
 	return pd, 0
@@ -257,8 +258,8 @@ func poll_runtime_pollClose(pd *pollDesc) {
 	if rg != 0 && rg != pdReady {
 		throw("runtime: blocked read on closing polldesc")
 	}
-	netpollclose(pd.fd)
-	pollcache.free(pd)
+	netpollclose(pd.fd)//把pd.fd从底层的epoll监听队列里移除
+	pollcache.free(pd)//把pd释放回复用池
 }
 
 func (c *pollCache) free(pd *pollDesc) {
@@ -413,7 +414,7 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 	var rg, wg *g
 	pd.publishInfo()
 	rg = netpollunblock(pd, 'r', false)//返回阻塞在该pd上等待read的g
-	wg = netpollunblock(pd, 'w', false)
+	wg = netpollunblock(pd, 'w', false)//返回阻塞在该pd上等待write的g
 	if pd.rt.f != nil {
 		deltimer(&pd.rt)
 		pd.rt.f = nil
@@ -424,10 +425,10 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 	}
 	unlock(&pd.lock)
 	if rg != nil {
-		netpollgoready(rg, 3)
+		netpollgoready(rg, 3)//把所有被阻塞的g唤醒进入runnable态
 	}
 	if wg != nil {
-		netpollgoready(wg, 3)
+		netpollgoready(wg, 3)//把所有被阻塞的g唤醒进入runnable态
 	}
 }
 
@@ -457,7 +458,7 @@ func netpollready(toRun *gList, pd *pollDesc, mode int32) {
 
 func netpollcheckerr(pd *pollDesc, mode int32) int {
 	info := pd.info()
-	if info.closing() {
+	if info.closing() {//判断底层的poll是否关闭了
 		return pollErrClosing
 	}
 	if (mode == 'r' && info.expiredReadDeadline()) || (mode == 'w' && info.expiredWriteDeadline()) {
@@ -473,7 +474,7 @@ func netpollcheckerr(pd *pollDesc, mode int32) int {
 }
 
 func netpollblockcommit(gp *g, gpp unsafe.Pointer) bool {
-	r := atomic.Casuintptr((*uintptr)(gpp), pdWait, uintptr(unsafe.Pointer(gp)))
+	r := atomic.Casuintptr((*uintptr)(gpp), pdWait, uintptr(unsafe.Pointer(gp)))//把gp设为 pdWait 状态
 	if r {
 		// Bump the count of goroutines waiting for the poller.
 		// The scheduler uses this to decide whether to block
@@ -482,10 +483,10 @@ func netpollblockcommit(gp *g, gpp unsafe.Pointer) bool {
 	}
 	return r
 }
-
+// 把 等待netpoll可读的gp 状态更新为runnable，也即该gp上监听的事件有回应了
 func netpollgoready(gp *g, traceskip int) {
 	atomic.Xadd(&netpollWaiters, -1)
-	goready(gp, traceskip+1)
+	goready(gp, traceskip+1)//更新goroutine状态，使得goroutine 进入runnable态
 }
 
 // returns true if IO is ready, or false if timedout or closed
@@ -493,7 +494,7 @@ func netpollgoready(gp *g, traceskip int) {
 // Concurrent calls to netpollblock in the same mode are forbidden, as pollDesc
 // can hold only a single waiting goroutine for each mode.
 // 如果IO ready/就绪 就返回true，如果超时或已经关闭则返回false
-// waitio参数
+// waitio参数 -
 func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 	gpp := &pd.rg
 	if mode == 'w' {
@@ -521,6 +522,7 @@ func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 	// this is necessary because runtime_pollUnblock/runtime_pollSetDeadline/deadlineimpl
 	// do the opposite: store to closing/rd/wd, publishInfo, load of rg/wg
 	if waitio || netpollcheckerr(pd, mode) == pollNoError {
+		//挂起g
 		gopark(netpollblockcommit, unsafe.Pointer(gpp), waitReasonIOWait, traceEvGoBlockNet, 5)
 	}
 	// be careful to not lose concurrent pdReady notification
@@ -611,7 +613,7 @@ func netpollReadDeadline(arg any, seq uintptr) {
 func netpollWriteDeadline(arg any, seq uintptr) {
 	netpolldeadlineimpl(arg.(*pollDesc), seq, false, true)
 }
-
+//从poll复用池里取一个poll
 func (c *pollCache) alloc() *pollDesc {
 	lock(&c.lock)
 	if c.first == nil {

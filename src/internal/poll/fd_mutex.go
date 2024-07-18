@@ -9,9 +9,10 @@ import "sync/atomic"
 // fdMutex is a specialized synchronization primitive that manages
 // lifetime of an fd and serializes access to Read, Write and Close
 // methods on FD.
+// fdMutex 是一种专用于fd的同步原语，它用于管理fd的生命周期，以及序列化/串行化对FD的读写关闭等方法的访问
 type fdMutex struct {
 	state uint64
-	rsema uint32
+	rsema uint32//信号量
 	wsema uint32
 }
 
@@ -23,15 +24,16 @@ type fdMutex struct {
 // 20 bits - number of outstanding read waiters.
 // 20 bits - number of outstanding write waiters.
 const (
-	mutexClosed  = 1 << 0
-	mutexRLock   = 1 << 1
-	mutexWLock   = 1 << 2
-	mutexRef     = 1 << 3
-	mutexRefMask = (1<<20 - 1) << 3
-	mutexRWait   = 1 << 23
-	mutexRMask   = (1<<20 - 1) << 23
-	mutexWWait   = 1 << 43
-	mutexWMask   = (1<<20 - 1) << 43
+	mutexClosed  = 1 << 0 // 0001
+	mutexRLock   = 1 << 1 // 0010
+	mutexWLock   = 1 << 2 // 0100
+
+	mutexRef     = 1 << 3 // 1000
+	mutexRefMask = (1<<20 - 1) << 3 // 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0111 1111 1111 1111 1111 1000 /64b
+	mutexRWait   = 1 << 23			// 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 1000 0000 0000 0000 0000 0000
+	mutexRMask   = (1<<20 - 1) << 23// 0000 0000 0000 0000 0000 0000 0000 0000 1111 1111 1000 0000 0000 0000 0000 0000
+	mutexWWait   = 1 << 43			// 0000 0000 0000 0000 0000 1000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
+	mutexWMask   = (1<<20 - 1) << 43// 0000 0000 0000 1111 1111 1000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
 )
 
 const overflowMsg = "too many concurrent operations on a single file or socket (max 1048575)"
@@ -50,10 +52,11 @@ const overflowMsg = "too many concurrent operations on a single file or socket (
 
 // incref adds a reference to mu.
 // It reports whether mu is available for reading or writing.
+// 引用次数自增1，返回是否可以进行读写
 func (mu *fdMutex) incref() bool {
 	for {
 		old := atomic.LoadUint64(&mu.state)
-		if old&mutexClosed != 0 {
+		if old&mutexClosed != 0 {//当前已是关闭态
 			return false
 		}
 		new := old + mutexRef
@@ -66,12 +69,11 @@ func (mu *fdMutex) incref() bool {
 	}
 }
 
-// increfAndClose sets the state of mu to closed.
-// It returns false if the file was already closed.
+// increfAndClose 关闭mu，如果已关闭则返回false
 func (mu *fdMutex) increfAndClose() bool {
 	for {
 		old := atomic.LoadUint64(&mu.state)
-		if old&mutexClosed != 0 {
+		if old&mutexClosed != 0 {//已关闭
 			return false
 		}
 		// Mark as closed and acquire a reference.
@@ -86,11 +88,11 @@ func (mu *fdMutex) increfAndClose() bool {
 			// they will observe closed flag after wakeup.
 			for old&mutexRMask != 0 {
 				old -= mutexRWait
-				runtime_Semrelease(&mu.rsema)
+				runtime_Semrelease(&mu.rsema)//发出信号量，此时mu.rsema自增1
 			}
 			for old&mutexWMask != 0 {
 				old -= mutexWWait
-				runtime_Semrelease(&mu.wsema)
+				runtime_Semrelease(&mu.wsema)//发出信号量，此时mu.wsema自增1
 			}
 			return true
 		}
@@ -99,6 +101,7 @@ func (mu *fdMutex) increfAndClose() bool {
 
 // decref removes a reference from mu.
 // It reports whether there is no remaining reference.
+// 从mu里去掉一次引用，返回是否已再无引用
 func (mu *fdMutex) decref() bool {
 	for {
 		old := atomic.LoadUint64(&mu.state)
@@ -114,6 +117,7 @@ func (mu *fdMutex) decref() bool {
 
 // lock adds a reference to mu and locks mu.
 // It reports whether mu is available for reading or writing.
+// 引用次数自增并且锁上mu，返回是否可以进行读或写了
 func (mu *fdMutex) rwlock(read bool) bool {
 	var mutexBit, mutexWait, mutexMask uint64
 	var mutexSema *uint32
@@ -130,28 +134,31 @@ func (mu *fdMutex) rwlock(read bool) bool {
 	}
 	for {
 		old := atomic.LoadUint64(&mu.state)
-		if old&mutexClosed != 0 {
+		if old&mutexClosed != 0 {//当前fd已关闭
 			return false
 		}
 		var new uint64
 		if old&mutexBit == 0 {
 			// Lock is free, acquire it.
+			// 锁是空闲的
 			new = (old | mutexBit) + mutexRef
 			if new&mutexRefMask == 0 {
 				panic(overflowMsg)
 			}
 		} else {
 			// Wait for lock.
+			// 等待锁
 			new = old + mutexWait
 			if new&mutexMask == 0 {
 				panic(overflowMsg)
 			}
 		}
 		if atomic.CompareAndSwapUint64(&mu.state, old, new) {
-			if old&mutexBit == 0 {
+			if old&mutexBit == 0 {//如果锁是空闲则，则立即返回
 				return true
 			}
-			runtime_Semacquire(mutexSema)
+			//否则锁不空闲
+			runtime_Semacquire(mutexSema)//阻塞在此 等待mutexSema信号（当mutexSema值<=0时则阻塞，>0时则立即返回）
 			// The signaller has subtracted mutexWait.
 		}
 	}
@@ -193,13 +200,14 @@ func (mu *fdMutex) rwunlock(read bool) bool {
 }
 
 // Implemented in runtime package.
-func runtime_Semacquire(sema *uint32)
-func runtime_Semrelease(sema *uint32)
+func runtime_Semacquire(sema *uint32)//获取信号，此时sema自减1，当sema自减1后小于0，那么调用方将会被阻塞
+func runtime_Semrelease(sema *uint32)//释放信号，此时sema自增1
 
 // incref adds a reference to fd.
 // It returns an error when fd cannot be used.
+// incref 往fd上添加一个引用，当fd无法使用时返回错误
 func (fd *FD) incref() error {
-	if !fd.fdmu.incref() {
+	if !fd.fdmu.incref() {//返回false，代表该fd已关闭了
 		return errClosing(fd.isFile)
 	}
 	return nil
@@ -209,7 +217,7 @@ func (fd *FD) incref() error {
 // It also closes fd when the state of fd is set to closed and there
 // is no remaining reference.
 func (fd *FD) decref() error {
-	if fd.fdmu.decref() {
+	if fd.fdmu.decref() {//如果为true，说明该fd已无引用，可以关闭了
 		return fd.destroy()//关闭底层fd
 	}
 	return nil

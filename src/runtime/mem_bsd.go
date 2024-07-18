@@ -14,11 +14,11 @@ import (
 // which prevents us from allocating more stack.
 //go:nosplit
 func sysAlloc(n uintptr, sysStat *sysMemStat) unsafe.Pointer {
-	v, err := mmap(nil, n, _PROT_READ|_PROT_WRITE, _MAP_ANON|_MAP_PRIVATE, -1, 0)
+	v, err := mmap(nil, n, _PROT_READ|_PROT_WRITE, _MAP_ANON|_MAP_PRIVATE, -1, 0)//向系统申请内存
 	if err != 0 {
 		return nil
 	}
-	sysStat.add(int64(n))
+	sysStat.add(int64(n))//统计新申请的内存
 	return v
 }
 

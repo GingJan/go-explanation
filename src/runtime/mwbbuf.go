@@ -141,6 +141,7 @@ func (b *wbBuf) empty() bool {
 //
 //go:nowritebarrierrec
 //go:nosplit
+// putFast 把old和new添加到 write 屏蔽的缓冲池里
 func (b *wbBuf) putFast(old, new uintptr) bool {
 	p := (*[2]uintptr)(unsafe.Pointer(b.next))
 	p[0] = old

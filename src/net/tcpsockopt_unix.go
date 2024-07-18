@@ -19,6 +19,6 @@ func setKeepAlivePeriod(fd *netFD, d time.Duration) error {
 		return wrapSyscallError("setsockopt", err)
 	}
 	err := fd.pfd.SetsockoptInt(syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
-	runtime.KeepAlive(fd)
-	return wrapSyscallError("setsockopt", err)
+	runtime.KeepAlive(fd)//确保fd不会被回收
+	return wrapSyscallError("setsockopt", err)//返回一个系统错误
 }

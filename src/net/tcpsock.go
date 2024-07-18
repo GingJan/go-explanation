@@ -219,7 +219,7 @@ func (c *TCPConn) SetNoDelay(noDelay bool) error {
 
 func newTCPConn(fd *netFD) *TCPConn {
 	c := &TCPConn{conn{fd}}
-	setNoDelay(c.fd, true)
+	setNoDelay(c.fd, true)//negale算法
 	return c
 }
 

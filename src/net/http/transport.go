@@ -7,6 +7,7 @@
 // This is the low-level Transport implementation of RoundTripper.
 // The high-level interface is in client.go.
 
+// 本文件是RoundTripper的底层Transport实现，高层接口在client.go文件里
 package http
 
 import (
@@ -118,6 +119,9 @@ type Transport struct {
 	// "http" is assumed.
 	//
 	// If Proxy is nil or returns a nil *URL, no proxy is used.
+	// Proxy 返回一个函数，该函数返回指定Request请求的代理，如果该函数返回错误，则该请求会被终止
+	// 类型类型由URL协议决定，http、https、socks5都可支持，如果协议为空则默认http协议
+	// 如果 Proxy字段是nil或者返回的URL是nil，则代表没使用代理
 	Proxy func(*Request) (*url.URL, error)
 
 	// DialContext specifies the dial function for creating unencrypted TCP connections.
@@ -128,6 +132,8 @@ type Transport struct {
 	// A RoundTrip call that initiates a dial may end up using
 	// a connection dialed previously when the earlier connection
 	// becomes idle before the later DialContext completes.
+	// DialContext 字段存放 创建非加密TCP连接 的dial函数，如果本字段为nil
+	// （以及下面已被弃用的Dial字段也是为nil），则代表使用数据包连接（UDP）进行网络传输
 	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 
 	// Dial specifies the dial function for creating unencrypted TCP connections.
@@ -436,6 +442,7 @@ func (t *Transport) onceSetNextProtoDefaults() {
 //
 // As a special case, if req.URL.Host is "localhost" (with or without
 // a port number), then a nil URL and nil error will be returned.
+// ProxyFromEnvironment 返回代理的URL
 func ProxyFromEnvironment(req *Request) (*url.URL, error) {
 	return envProxyFunc()(req.URL)
 }

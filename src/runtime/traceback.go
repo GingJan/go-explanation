@@ -1130,7 +1130,7 @@ func tracebackHexdump(stk stack, frame *stkframe, bad uintptr) {
 // If fixed is true, any goroutine that can vary between user and
 // system (that is, the finalizer goroutine) is considered a user
 // goroutine.
-// 是否系统协程
+// gp是否系统协程
 func isSystemGoroutine(gp *g, fixed bool) bool {
 	// Keep this in sync with cmd/trace/trace.go:isSystemGoroutine.
 	f := findfunc(gp.startpc)//获取gp入口函数的信息
@@ -1146,12 +1146,12 @@ func isSystemGoroutine(gp *g, fixed bool) bool {
 		if fixed {
 			// This goroutine can vary. In fixed mode,
 			// always consider it a user goroutine.
-			// 本gp是可变化的，在fixed模式下，总把它当作用户协程
+			// 是可变的G，在fixed=true下，总把它当作用户协程
 			return false
 		}
 		return !fingRunning
 	}
-	return hasPrefix(funcname(f), "runtime.")//如果该入口函数名字有runtime.前缀，则是认为该gp是系统协程
+	return hasPrefix(funcname(f), "runtime.")//如果该入口函数名字有runtime.前缀，则是认为该G是系统协程
 }
 
 // SetCgoTraceback records three C functions to use to gather

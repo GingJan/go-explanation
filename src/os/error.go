@@ -48,6 +48,7 @@ type timeout interface {
 type PathError = fs.PathError
 
 // SyscallError records an error from a specific system call.
+// 使用本结构体对系统错误进行一层封装
 type SyscallError struct {
 	Syscall string
 	Err     error

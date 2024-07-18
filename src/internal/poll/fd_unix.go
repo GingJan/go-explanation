@@ -15,14 +15,17 @@ import (
 
 // FD is a file descriptor. The net and os packages use this type as a
 // field of a larger type representing a network connection or OS file.
+// FD 文件描述符。net和os包使用本结构体代表网络连接或系统文件
 type FD struct {
 	// Lock sysfd and serialize access to Read and Write methods.
-	fdmu fdMutex
+	// sysfd锁，用于序列化访问 Read 和 Write 方法
+	fdmu fdMutex//该字段用于引用计数
 
 	// 系统的文件描述符fd，不可变更，只会在 Close 关闭时变为-1
 	Sysfd int
 
 	// I/O poller.
+	// 底层 I/O poller
 	pd pollDesc
 
 	// Writev cache.
@@ -32,17 +35,21 @@ type FD struct {
 	csema uint32//当文件被关闭时，该信号量就会发出信号
 
 	// Non-zero if this file has been set to blocking mode.
+	// 如果文件被设为阻塞模式，则该值为非0（即1）
 	isBlocking uint32
 
 	// Whether this is a streaming descriptor, as opposed to a
 	// packet-based descriptor like a UDP socket. Immutable.
+	// 流描述符标识，true则为流描述符，false则为类似UDP包的包描述符（也即true则是TCP、false则是UDP）
 	IsStream bool
 
 	// Whether a zero byte read indicates EOF. This is false for a
 	// message based socket connection.
+	// 标识是否EOF，如果是socket连接，则为false
 	ZeroReadIsEOF bool
 
 	// Whether this is a file rather than a network socket.
+	// 是文件还是网络socket
 	isFile bool
 }
 
@@ -56,11 +63,11 @@ func (fd *FD) Init(net string, pollable bool) error {
 	if net == "file" {
 		fd.isFile = true
 	}
-	if !pollable {
+	if !pollable {//非pollable，也即阻塞模式
 		fd.isBlocking = 1
 		return nil
 	}
-	err := fd.pd.init(fd)
+	err := fd.pd.init(fd)//把fd添加到底层epoll的监听队列里
 	if err != nil {
 		// If we could not initialize the runtime poller,
 		// assume we are using blocking mode.
@@ -69,13 +76,11 @@ func (fd *FD) Init(net string, pollable bool) error {
 	return err
 }
 
-// Destroy closes the file descriptor. This is called when there are
-// no remaining references.
-// destroy 关闭fd，当该fd不再有引用时才调用
+// destroy 关闭底层fd，当该fd不再有引用时才调用
 func (fd *FD) destroy() error {
 	// Poller may want to unregister fd in readiness notification mechanism,
 	// so this must be executed before CloseFunc.
-	// Poller轮询器要删掉fd的注册，所以必须在 CloseFunc 前调用
+	// Poller要删掉fd的注册，所以必须在 CloseFunc 前调用
 	fd.pd.close()
 
 	// We don't use ignoringEINTR here because POSIX does not define
@@ -83,16 +88,17 @@ func (fd *FD) destroy() error {
 	// If the descriptor is indeed closed, using a loop would race
 	// with some other goroutine opening a new descriptor.
 	// (The Linux kernel guarantees that it is closed on an EINTR error.)
-	// 调用系统方法 关闭fd
+	// 调用系统方法关闭底层的系统fd（注意在关闭系统fd前，需要在epoll上把该fd的监听注销掉）
 	err := CloseFunc(fd.Sysfd)
 
 	fd.Sysfd = -1
-	runtime_Semrelease(&fd.csema)
+	runtime_Semrelease(&fd.csema)//系统fd被关闭，发出信号
 	return err
 }
 
 // Close closes the FD. The underlying file descriptor is closed by the
 // destroy method when there are no remaining references.
+// 关闭FD，若底层的文件描述符fd无引用，则会被destroy方法关闭
 func (fd *FD) Close() error {
 	if !fd.fdmu.increfAndClose() {
 		return errClosing(fd.isFile)
@@ -103,7 +109,7 @@ func (fd *FD) Close() error {
 	// the final decref will close fd.sysfd. This should happen
 	// fairly quickly, since all the I/O is non-blocking, and any
 	// attempts to block in the pollDesc will return errClosing(fd.isFile).
-	fd.pd.evict()//唤醒所有阻塞在该fd上的g
+	fd.pd.evict()//关闭底层socket（底层会唤醒所有阻塞在该fd上的g）
 
 	// The call to decref will call destroy if there are no other
 	// references.
@@ -116,13 +122,14 @@ func (fd *FD) Close() error {
 	// No need for an atomic read of isBlocking, increfAndClose means
 	// we have exclusive access to fd.
 	if fd.isBlocking == 0 {
-		runtime_Semacquire(&fd.csema)
+		//等待fd关闭的信号，只在非阻塞模式时才会等待。因为在阻塞模式下，只要有一个IO还在阻塞中，就无法进行关闭
+		runtime_Semacquire(&fd.csema)//等待fd关闭的信号，以确保fd关闭完成
 	}
 
 	return err
 }
 
-// SetBlocking puts the file into blocking mode.
+// SetBlocking 把文件设为阻塞模式
 func (fd *FD) SetBlocking() error {
 	if err := fd.incref(); err != nil {
 		return err
@@ -131,8 +138,9 @@ func (fd *FD) SetBlocking() error {
 	// Atomic store so that concurrent calls to SetBlocking
 	// do not cause a race condition. isBlocking only ever goes
 	// from 0 to 1 so there is no real race here.
+	// 原子保存，因此并发调用本函数也不会导致竞态
 	atomic.StoreUint32(&fd.isBlocking, 1)
-	return syscall.SetNonblock(fd.Sysfd, false)
+	return syscall.SetNonblock(fd.Sysfd, false)//通过系统调用把fd设为非阻塞模式
 }
 
 // Darwin and FreeBSD can't read or write 2GB+ files at a time,
@@ -143,6 +151,7 @@ func (fd *FD) SetBlocking() error {
 const maxRW = 1 << 30
 
 // Read implements io.Reader.
+// 尝试从fd里读取数据，当无数据且是非阻塞时，则会polling，当前g会被挂起
 func (fd *FD) Read(p []byte) (int, error) {
 	if err := fd.readLock(); err != nil {
 		return 0, err
@@ -159,14 +168,14 @@ func (fd *FD) Read(p []byte) (int, error) {
 	if err := fd.pd.prepareRead(fd.isFile); err != nil {
 		return 0, err
 	}
-	if fd.IsStream && len(p) > maxRW {
+	if fd.IsStream && len(p) > maxRW {//如果是TCP，则一次调用最大返回数据量是maxRW
 		p = p[:maxRW]
 	}
 	for {
-		n, err := ignoringEINTRIO(syscall.Read, fd.Sysfd, p)
+		n, err := ignoringEINTRIO(syscall.Read, fd.Sysfd, p)//非阻塞模式，调用底层的系统read后，立即返回
 		if err != nil {
 			n = 0
-			if err == syscall.EAGAIN && fd.pd.pollable() {
+			if err == syscall.EAGAIN && fd.pd.pollable() {//如果是poll的，则进入polling等待
 				if err = fd.pd.waitRead(fd.isFile); err == nil {//go会在这挂起，直到有网络事件
 					continue
 				}
@@ -207,6 +216,7 @@ func (fd *FD) Pread(p []byte, off int64) (int, error) {
 }
 
 // ReadFrom wraps the recvfrom network call.
+// ReadFrom 对 底层系统recvfrom函数 的封装
 func (fd *FD) ReadFrom(p []byte) (int, syscall.Sockaddr, error) {
 	if err := fd.readLock(); err != nil {
 		return 0, nil, err
@@ -595,6 +605,7 @@ func (fd *FD) WriteMsgInet6(p []byte, oob []byte, sa *syscall.SockaddrInet6) (in
 }
 
 // Accept wraps the accept network call.
+// Accept 封装底层网络调用accept
 func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 	if err := fd.readLock(); err != nil {
 		return -1, nil, "", err
@@ -610,18 +621,22 @@ func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 			return s, rsa, "", err
 		}
 		switch err {
-		case syscall.EINTR://系统中断
+		case syscall.EINTR:
+			//系统中断
 			continue
-		case syscall.EAGAIN://非阻塞，无连接时，走这里
-			if fd.pd.pollable() {
-				//当没有新连接请求时，则当前协程进入gopark
-				if err = fd.pd.waitRead(fd.isFile); err == nil {
+		case syscall.EAGAIN:
+			//非阻塞模式，当无连接时走这里
+			if fd.pd.pollable() {//是可poll的
+				//当没有新的连接请求时，则当前协程进入gopark
+				if err = fd.pd.waitRead(fd.isFile); err == nil {//g阻塞在这
 
-					//网络有io，此时本协程被唤醒，继续执行后续逻辑，continue回到上面accept，获取到一个新连接
+					//网络有io，此时本协程被唤醒，从这里开始执行，并继续执行后续逻辑，continue回到上面accept，获取到一个新连接
 					continue
 				}
 			}
-		case syscall.ECONNABORTED://在backlog队列里等待被accept的socket还没来得及被accept就关闭了
+		case syscall.ECONNABORTED:
+			// 在backlog队列里等待被accept的socket还没来得及被accept就关闭了，
+			// 此时就会出现本错误走到本路径
 			// This means that a socket on the listen
 			// queue was closed before we Accept()ed it;
 			// it's a silly error, so try again.

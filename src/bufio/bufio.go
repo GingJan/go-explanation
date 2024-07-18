@@ -32,7 +32,7 @@ var (
 type Reader struct {
 	buf          []byte    //环形切片，读写都在该切片内进行（可参考环形链表），w-r代表剩余可写入数据的空间，若w-r < len(buf) 说明环形切片未满
 	rd           io.Reader // 调用者注入的reader（底层reader）
-	r, w         int       // 表示读/写在 buf 切片的下标
+	r, w         int       // 表示r读/w写在 buf 切片的下标
 	err          error
 	lastByte     int // last byte read for UnreadByte; -1 代表无效
 	lastRuneSize int // size of last rune read for UnreadRune; -1 means invalid
@@ -281,7 +281,10 @@ func (b *Reader) ReadByte() (byte, error) {
 // UnreadByte returns an error if the most recent method called on the
 // Reader was not a read operation. Notably, Peek, Discard, and WriteTo are not
 // considered read operations.
-// UnreadByte 返回一个错误
+//
+// UnreadByte 把最后一个字节回退已读（置为未读），只有最后一个字节才能回退。
+// Reader 最后一次调用的不是读操作，那么UnreadByte方法会返回错误，
+// 注意，Peek Discard WriteTo这三个方法不算是读操作
 func (b *Reader) UnreadByte() error {
 	if b.lastByte < 0 || b.r == 0 && b.w > 0 {
 		return ErrInvalidUnreadByte
