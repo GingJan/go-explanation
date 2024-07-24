@@ -26,6 +26,12 @@ func runtime_SemacquireMutex(s *uint32, lifo bool, skipframes int)
 // If handoff is true, pass count directly to the first waiter.
 // skipframes is the number of frames to omit during tracing, counting from
 // runtime_Semrelease's caller.
+// Semrelease自动给信号量计数器s自增1，用于表示释放了1个资源（通常是全局竞争的资源），
+// 同时通知阻塞在Semacquire上等待的G协程
+// 如果handoff参数是true，则直接把信号量的所有权交给等待队列里的第一个G
+// 否则false，就要调度器来决定把信号量的所有权交给哪个G
+// skipframes 指示在错误堆栈跟踪中应该跳过的帧数，用于调试和错误报告，通常可以用来过滤掉不相关的调用堆栈帧，
+// 使得错误报告更简洁。
 func runtime_Semrelease(s *uint32, handoff bool, skipframes int)
 
 // See runtime/sema.go for documentation.
@@ -49,6 +55,11 @@ func init() {
 
 // Active spinning runtime support.
 // runtime_canSpin reports whether spinning makes sense at the moment.
+// 根据当前的自旋次数和系统状态（如处理器数目、线程负载等）来决定是否可以继续自旋，是则返回true
+// i是已自旋等待的次数，由调用者维护
+// 这个函数通常在实现自旋锁（spin lock）或者其他需要忙等待的同步原语时使用。
+// 它有助于优化锁的性能，通过在适当的时候进行自旋等待，避免线程频繁进入和退出睡眠状态，从而减少上下文切换的开销。
+// 当返回true则说明可以继续自旋等待，返回false则说明需进入睡眠了
 func runtime_canSpin(i int) bool
 
 // runtime_doSpin does active spinning.
