@@ -13,8 +13,9 @@ import (
 func Getpagesize() int { return syscall.Getpagesize() }
 
 // File represents an open file descriptor.
+// 代表打开的文件描述符
 type File struct {
-	*file // os specific
+	*file // 根据os的不同，结构体不同
 }
 
 // A FileInfo describes a file and is returned by Stat and Lstat.

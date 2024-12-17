@@ -29,13 +29,14 @@ var (
 // Buffered input.
 
 // Reader implements buffering for an io.Reader object.
+// Reader 为io.Reader实现了缓冲功能
 type Reader struct {
 	buf          []byte    //环形切片，读写都在该切片内进行（可参考环形链表），w-r代表剩余可写入数据的空间，若w-r < len(buf) 说明环形切片未满
 	rd           io.Reader // 调用者注入的reader（底层reader）
-	r, w         int       // 表示r读/w写在 buf 切片的下标
-	err          error
-	lastByte     int // last byte read for UnreadByte; -1 代表无效
-	lastRuneSize int // size of last rune read for UnreadRune; -1 means invalid
+	r, w         int       // 表示r读/w写在 buf 切片的下标（环形切片）
+	err          error     // 错误信息
+	lastByte     int       // last byte read for UnreadByte; -1 代表无效
+	lastRuneSize int       // size of last rune read for UnreadRune; -1 means invalid
 }
 
 const minReadBufferSize = 16
@@ -44,13 +45,17 @@ const maxConsecutiveEmptyReads = 100
 // NewReaderSize returns a new Reader whose buffer has at least the specified
 // size. If the argument io.Reader is already a Reader with large enough
 // size, it returns the underlying Reader.
+// NewReaderSize 返回一个拥有size大小缓冲区的新Reader（且把rd作为底层reader）。如果参数io.Reader是一个已拥有
+// 足够size的Reader，NewReaderSize会返回这个底层的Reader
 func NewReaderSize(rd io.Reader, size int) *Reader {
-	// Is it already a Reader?
+	// 若传入的rd已经是Reader了
 	b, ok := rd.(*Reader)
-	if ok && len(b.buf) >= size {
+	if ok && len(b.buf) >= size {//rd拥有一个比size还大的缓冲，则直接返回传入的rd
 		return b
 	}
-	if size < minReadBufferSize {
+
+	// 传入的rd缓冲不够，则新建一个Reader，并把rd作为底层Reader
+	if size < minReadBufferSize {//最少得16B
 		size = minReadBufferSize
 	}
 	r := new(Reader)
@@ -81,8 +86,8 @@ func (b *Reader) Reset(r io.Reader) {
 
 func (b *Reader) reset(buf []byte, r io.Reader) {
 	*b = Reader{
-		buf:          buf,
-		rd:           r,
+		buf:          buf,//本对象的缓冲区
+		rd:           r,  //底层reader
 		lastByte:     -1,
 		lastRuneSize: -1,
 	}
@@ -91,7 +96,7 @@ func (b *Reader) reset(buf []byte, r io.Reader) {
 var errNegativeRead = errors.New("bufio: reader returned negative count from Read")
 
 // fill reads a new chunk into the buffer.
-// fill 从底层读取新的数据段到缓冲b.buf以填满
+// fill 从底层b.rd处读取新数据段到缓冲b.buf以填满
 func (b *Reader) fill() {
 	// 把剩余的数据都挪到buf的起始位置
 	if b.r > 0 {
@@ -107,11 +112,11 @@ func (b *Reader) fill() {
 	// Read new data: try a limited number of times.
 	// 从底层数据流读取新的数据：尝试 maxConsecutiveEmptyReads 次后底层依旧无数据或b.buf满了就返回错误
 	for i := maxConsecutiveEmptyReads; i > 0; i-- {
-		n, err := b.rd.Read(b.buf[b.w:]) //从rd里读取数据到b.buf的[b.w:]里
+		n, err := b.rd.Read(b.buf[b.w:]) //从rd里读取数据到b.buf的[b.w:]里，b.w是b.buf可写的起始点
 		if n < 0 {
 			panic(errNegativeRead)
 		}
-		b.w += n
+		b.w += n //更新b.buf可写起始点的下标
 		if err != nil {
 			b.err = err
 			return
@@ -123,6 +128,7 @@ func (b *Reader) fill() {
 	b.err = io.ErrNoProgress
 }
 
+// readErr 返回b.err的错误，并清空
 func (b *Reader) readErr() error {
 	err := b.err
 	b.err = nil
@@ -136,6 +142,7 @@ func (b *Reader) readErr() error {
 //
 // Calling Peek prevents a UnreadByte or UnreadRune call from succeeding
 // until the next read operation.
+//
 // Peek 从b.buf读取n个字节数据而不推进b.buf的读取进度（可重复读取该数据段，因为b.r没有推进）
 // 如果返回的字节数少于n个，error也会返回错误（提示为什么少于）
 // 如果n大于b的缓冲大小，则返回 ErrBufferFull
@@ -174,6 +181,7 @@ func (b *Reader) Peek(n int) ([]byte, error) {
 // If Discard skips fewer than n bytes, it also returns an error.
 // If 0 <= n <= b.Buffered(), Discard is guaranteed to succeed without
 // reading from the underlying io.Reader.
+// 把n个字节的数据丢弃，如果本Reader的缓冲区已经没数据了，则从底层rd里读取出来再丢弃
 func (b *Reader) Discard(n int) (discarded int, err error) {
 	if n < 0 {
 		return 0, ErrNegativeCount
@@ -188,9 +196,9 @@ func (b *Reader) Discard(n int) (discarded int, err error) {
 	remain := n
 	for {
 		skip := b.Buffered()
-		if skip == 0 {
-			b.fill()
-			skip = b.Buffered()
+		if skip == 0 {//没有剩余数据了
+			b.fill()//从底层rd读取数据到本Reader的buf里
+			skip = b.Buffered()//再看看还剩下多少字节的数据
 		}
 		if skip > remain {
 			skip = remain
@@ -262,13 +270,14 @@ func (b *Reader) Read(p []byte) (n int, err error) {
 
 // ReadByte reads and returns a single byte.
 // If no byte is available, returns an error.
+// ReadByte 读取并返回一个字节，如果没有数据可读，则返回错误error
 func (b *Reader) ReadByte() (byte, error) {
 	b.lastRuneSize = -1
 	for b.r == b.w {
 		if b.err != nil {
 			return 0, b.readErr()
 		}
-		b.fill() // buffer is empty
+		b.fill() // 本Reader的buf已经没数据了，则从底层rd读取数据到本Reader的buf里，然后再读取返回给调用方
 	}
 	c := b.buf[b.r]
 	b.r++
@@ -305,17 +314,18 @@ func (b *Reader) UnreadByte() error {
 // ReadRune reads a single UTF-8 encoded Unicode character and returns the
 // rune and its size in bytes. If the encoded rune is invalid, it consumes one byte
 // and returns unicode.ReplacementChar (U+FFFD) with a size of 1.
+// 读取并返回一个UTF8编码的多字节字符（如中文），只返回一个字节及其所占的字节个数
 func (b *Reader) ReadRune() (r rune, size int, err error) {
-	for b.r+utf8.UTFMax > b.w && !utf8.FullRune(b.buf[b.r:b.w]) && b.err == nil && b.w-b.r < len(b.buf) {
-		b.fill() // b.w-b.r < len(buf) => buffer is not full
+	for b.r+utf8.UTFMax > b.w && !utf8.FullRune(b.buf[b.r:b.w]) && b.err == nil && b.w-b.r < len(b.buf) { // b.w-b.r < len(buf) 说明本Reader的buf没满
+		b.fill() // 本Reader的buf还没满，则从底层rd读取数据以把本Reader的buf填满
 	}
 	b.lastRuneSize = -1
-	if b.r == b.w {
+	if b.r == b.w {//数据已经没了
 		return 0, 0, b.readErr()
 	}
-	r, size = rune(b.buf[b.r]), 1
-	if r >= utf8.RuneSelf {
-		r, size = utf8.DecodeRune(b.buf[b.r:b.w])
+	r, size = rune(b.buf[b.r]), 1//先取一个字节出来，判断是否多字节字符
+	if r >= utf8.RuneSelf {//如果是多字节字符
+		r, size = utf8.DecodeRune(b.buf[b.r:b.w])//将剩余的数据按UTF-8编码，解码成一个字符并确定解码所需的字节数。
 	}
 	b.r += size
 	b.lastByte = int(b.buf[b.r-1])
@@ -327,6 +337,7 @@ func (b *Reader) ReadRune() (r rune, size int, err error) {
 // the Reader was not a ReadRune, UnreadRune returns an error. (In this
 // regard it is stricter than UnreadByte, which will unread the last byte
 // from any read operation.)
+// UnreadRune 回退最后一次读取的rune字符
 func (b *Reader) UnreadRune() error {
 	if b.lastRuneSize < 0 || b.r < b.lastRuneSize {
 		return ErrInvalidUnreadRune
@@ -337,7 +348,7 @@ func (b *Reader) UnreadRune() error {
 	return nil
 }
 
-// Buffered returns the number of bytes that can be read from the current buffer.
+// Buffered 返回当前缓冲区里剩余可读取数据的字节数
 func (b *Reader) Buffered() int { return b.w - b.r }
 
 // ReadSlice reads until the first occurrence of delim in the input,
@@ -563,6 +574,7 @@ func (b *Reader) WriteTo(w io.Writer) (n int64, err error) {
 var errNegativeWrite = errors.New("bufio: writer returned negative count from Write")
 
 // writeBuf writes the Reader's buffer to the writer.
+// writeBuf 把本Reader缓冲区的数据写入到w里
 func (b *Reader) writeBuf(w io.Writer) (int64, error) {
 	n, err := w.Write(b.buf[b.r:b.w])
 	if n < 0 {
@@ -583,8 +595,8 @@ func (b *Reader) writeBuf(w io.Writer) (int64, error) {
 type Writer struct {
 	err error
 	buf []byte
-	n   int
-	wr  io.Writer
+	n   int // 已经使用的字节数，或当前写入的位置
+	wr  io.Writer //指向底层Writer
 }
 
 // NewWriterSize returns a new Writer whose buffer has at least the specified
@@ -628,7 +640,7 @@ func (b *Writer) Reset(w io.Writer) {
 	b.wr = w
 }
 
-// Flush writes any buffered data to the underlying io.Writer.
+// Flush 把本Writer缓冲区的数据全部写入到底层wr里
 func (b *Writer) Flush() error {
 	if b.err != nil {
 		return b.err
@@ -652,35 +664,38 @@ func (b *Writer) Flush() error {
 	return nil
 }
 
-// Available returns how many bytes are unused in the buffer.
+// Available 返回Writer缓冲区里还有多个字节空间可用
 func (b *Writer) Available() int { return len(b.buf) - b.n }
 
 // AvailableBuffer returns an empty buffer with b.Available() capacity.
 // This buffer is intended to be appended to and
 // passed to an immediately succeeding Write call.
 // The buffer is only valid until the next write operation on b.
+// AvailableBuffer 返回一个切片，表示 b.buf 中尚未使用的部分（从 b.n 到切片的末尾），
+// 并且该切片是一个空切片（长度为0）。具体来说，它提供了 b.buf 中从位置 b.n 开始到切片末尾的缓冲区空间，
+// 但是并没有实际的内容，它的长度被设置为0，意味着可以将数据追加到该切片中。
 func (b *Writer) AvailableBuffer() []byte {
-	return b.buf[b.n:][:0]
+	return b.buf[b.n:][:0]//截取操作，截取到长度为0，但是容量是原子切片的剩余容量。这实际上创建了一个零长度的切片，但它仍然指向原始切片 b.buf[b.n:] 的底层数组(切片的底层数组)。通过这种方式，可以确保返回的切片仍然能够增长，且不会再创建新的内存空间。
 }
 
-// Buffered returns the number of bytes that have been written into the current buffer.
+// Buffered 返回已写入当前Writer缓冲区的字节个数
 func (b *Writer) Buffered() int { return b.n }
 
 // Write writes the contents of p into the buffer.
 // It returns the number of bytes written.
 // If nn < len(p), it also returns an error explaining
 // why the write is short.
+// 把p的数据写入到底层wr里
 func (b *Writer) Write(p []byte) (nn int, err error) {
 	for len(p) > b.Available() && b.err == nil {
 		var n int
-		if b.Buffered() == 0 {
-			// Large write, empty buffer.
-			// Write directly from p to avoid copy.
+		if b.Buffered() == 0 {//当前缓冲区未有数据
+			// 则直接把p里数据写入到底层的wr，避免多一次复制
 			n, b.err = b.wr.Write(p)
 		} else {
-			n = copy(b.buf[b.n:], p)
+			n = copy(b.buf[b.n:], p)//把p的数据写入到本Writer的buf里
 			b.n += n
-			b.Flush()
+			b.Flush()//然后再把本Writer的buf数据全部写入到底层wr
 		}
 		nn += n
 		p = p[n:]
@@ -811,14 +826,13 @@ func (b *Writer) ReadFrom(r io.Reader) (n int64, err error) {
 
 // buffered input and output
 
-// ReadWriter stores pointers to a Reader and a Writer.
-// It implements io.ReadWriter.
+// ReadWriter 存放指向Reader和Writer的指针，它实现了io.ReadWriter接口
 type ReadWriter struct {
 	*Reader
 	*Writer
 }
 
-// NewReadWriter allocates a new ReadWriter that dispatches to r and w.
+// NewReadWriter 新建一个ReadWriter实例
 func NewReadWriter(r *Reader, w *Writer) *ReadWriter {
 	return &ReadWriter{r, w}
 }

@@ -14,7 +14,7 @@ package utf8
 // Numbers fundamental to the encoding.
 const (
 	RuneError = '\uFFFD'     // the "error" Rune or "Unicode replacement character"
-	RuneSelf  = 0x80         // 0x80(128)以下的字符使用单个字节存放 characters below RuneSelf are represented as themselves in a single byte.
+	RuneSelf  = 0x80         // 也即128, 在UTF-8编码中，如果字符的值>=utf8.RuneSelf，则表示该字符是一个多字节字符。
 	MaxRune   = '\U0010FFFF' // Maximum valid Unicode code point.
 	UTFMax    = 4            // maximum number of bytes of a UTF-8 encoded Unicode character.
 )
@@ -148,6 +148,7 @@ func FullRuneInString(s string) bool {
 // An encoding is invalid if it is incorrect UTF-8, encodes a rune that is
 // out of range, or is not the shortest possible UTF-8 encoding for the
 // value. No other validation is performed.
+// DecodeRune 解码UTF-8编码的字符（rune）并返回该字符及其占用的字节数
 func DecodeRune(p []byte) (r rune, size int) {
 	n := len(p)
 	if n < 1 {

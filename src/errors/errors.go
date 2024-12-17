@@ -60,6 +60,7 @@ func New(text string) error {
 }
 
 // errorString is a trivial implementation of error.
+// errorString 是error接口（builtin/builtin.go里的error接口）的简洁实现
 type errorString struct {
 	s string
 }

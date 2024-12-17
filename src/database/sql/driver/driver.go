@@ -94,6 +94,7 @@ type Driver interface {
 // 这两步骤使得驱动只需解析一次name 并且提供对每条连接上下文的访问
 type DriverContext interface {
 	// OpenConnector 的name参数和 Driver.Open 的name参数格式是一样的
+	// 返回一个实现了 driver.Connector 接口的实例
 	OpenConnector(name string) (Connector, error)
 }
 
@@ -109,6 +110,7 @@ type DriverContext interface {
 //
 // If a Connector implements io.Closer, the sql package's DB.Close
 // method will call Close and return error (if any).
+// 实现了该接口的结构体，代表可以通过该结构体新建连接
 type Connector interface {
 	// Connect returns a connection to the database.
 	// Connect may return a cached connection (one previously
@@ -285,10 +287,12 @@ type ConnBeginTx interface {
 
 // SessionResetter may be implemented by Conn to allow drivers to reset the
 // session state associated with the connection and to signal a bad connection.
+// 允许driver重置与本连接关联的会话上的状态
 type SessionResetter interface {
 	// ResetSession is called prior to executing a query on the connection
 	// if the connection has been used before. If the driver returns ErrBadConn
 	// the connection is discarded.
+	// 如果连接之前又被使用过，则在该连接执行查询前调用本方法进行会话重置
 	ResetSession(ctx context.Context) error
 }
 

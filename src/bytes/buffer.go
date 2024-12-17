@@ -18,10 +18,10 @@ const smallBufferSize = 64
 
 // A Buffer is a variable-sized buffer of bytes with Read and Write methods.
 // The zero value for Buffer is an empty buffer ready to use.
-// Buffer是一个可变容量的buffer，Buffer的零值是一个空buffer
+// Buffer是一个可变容量的缓冲区，Buffer的零值是一个空buffer
 type Buffer struct {
-	buf      []byte // contents are the bytes buf[off : len(buf)]
-	off      int    // 当前已读取数据的游标，从&buf[off]开始读取，从&buf[len(buf)]开始写入
+	buf      []byte // buf[off : len(buf)]的区域存放数据
+	off      int    // 当前已读取数据的游标，从&buf[off]开始读取，从&buf[len(buf)]（即末尾）开始写入
 	lastRead readOp // 最后一次读操作，last read operation, so that Unread* can work correctly.
 }
 

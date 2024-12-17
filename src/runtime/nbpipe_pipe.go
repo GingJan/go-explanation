@@ -7,10 +7,11 @@
 package runtime
 
 func nonblockingPipe() (r, w int32, errno int32) {
-	r, w, errno = pipe()
+	r, w, errno = pipe()//系统调用，创建一个管道
 	if errno != 0 {
 		return -1, -1, errno
 	}
+	//设置管道的读写为非阻塞
 	closeonexec(r)
 	setNonblock(r)
 	closeonexec(w)

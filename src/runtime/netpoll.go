@@ -69,7 +69,7 @@ const pollBlockSize = 4 * 1024
 // No heap pointers.
 //
 //go:notinheap
-// 网络poller描述符
+// 网络poller描述符。是Go运行时用来管理网络 I/O 操作（如 epoll 或 kqueue）的一个结构体
 type pollDesc struct {
 	link *pollDesc // in pollcache, protected by pollcache.lock
 	fd   uintptr   // constant for pollDesc usage lifetime
@@ -94,7 +94,7 @@ type pollDesc struct {
 	// rg, wg are accessed atomically and hold g pointers.
 	// (Using atomic.Uintptr here is similar to using guintptr elsewhere.)
 	rg atomic.Uintptr // pdReady, pdWait, G waiting for read or nil
-	wg atomic.Uintptr // pdReady, pdWait, G waiting for write or nil
+	wg atomic.Uintptr // pdReady, pdWait, G waiting for write or nil，相关的写操作的等待状态，有多个值：nil、pdReady、pdWait或等待写的G（的指针）
 
 	lock    mutex // 保护下面字段的变动 protects the following fields
 	closing bool
@@ -177,9 +177,9 @@ type pollCache struct {
 
 var (
 	netpollInitLock mutex
-	netpollInited   uint32
+	netpollInited   uint32 //netpoll是否初始化
 
-	pollcache      pollCache
+	pollcache      pollCache //poll复用池
 	netpollWaiters uint32 //等待netpoll的协程数量
 )
 
@@ -188,12 +188,13 @@ func poll_runtime_pollServerInit() {
 	netpollGenericInit()
 }
 
+// 初始化netpoll
 func netpollGenericInit() {
 	if atomic.Load(&netpollInited) == 0 {
 		lockInit(&netpollInitLock, lockRankNetpollInit)
 		lock(&netpollInitLock)
 		if netpollInited == 0 {
-			netpollinit()
+			netpollinit()//初始化netpoll，根据系统不同调用不同的netpollinit进行初始化epoll
 			atomic.Store(&netpollInited, 1)
 		}
 		unlock(&netpollInitLock)
@@ -214,16 +215,19 @@ func poll_runtime_isPollServerDescriptor(fd uintptr) bool {
 
 //go:linkname poll_runtime_pollOpen internal/poll.runtime_pollOpen
 func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
-	pd := pollcache.alloc()
+	pd := pollcache.alloc()//从复用池里分配一个空闲的pd实例，pd用于对fd封装
 	lock(&pd.lock)
+	/******对pd状态进行一个检查*******/
 	wg := pd.wg.Load()
-	if wg != 0 && wg != pdReady {
+	if wg != 0 && wg != pdReady { //此时wg为等待写的G 或 nil 或 pdWait=2。意味着此时有一个正在等待写操作的 G
 		throw("runtime: blocked write on free polldesc")
 	}
 	rg := pd.rg.Load()
 	if rg != 0 && rg != pdReady {
 		throw("runtime: blocked read on free polldesc")
 	}
+	/******对pd状态进行一个检查*******/
+
 	pd.fd = fd
 	pd.closing = false
 	pd.setEventErr(false)
@@ -237,7 +241,7 @@ func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
 	pd.publishInfo()
 	unlock(&pd.lock)
 
-	errno := netpollopen(fd, pd)//把fd添加到pd（epoll）里
+	errno := netpollopen(fd, pd)//把fd添加到epoll里，并于pd绑定，当事件触发时，调用pd
 	if errno != 0 {//添加过程出现错误，则
 		pollcache.free(pd)//归还pd到poll池
 		return nil, int(errno)
@@ -245,6 +249,7 @@ func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
 	return pd, 0
 }
 
+// 把pd指向的底层fd从epoll的监听队列移除
 //go:linkname poll_runtime_pollClose internal/poll.runtime_pollClose
 func poll_runtime_pollClose(pd *pollDesc) {
 	if !pd.closing {
@@ -259,7 +264,7 @@ func poll_runtime_pollClose(pd *pollDesc) {
 		throw("runtime: blocked read on closing polldesc")
 	}
 	netpollclose(pd.fd)//把pd.fd从底层的epoll监听队列里移除
-	pollcache.free(pd)//把pd释放回复用池
+	pollcache.free(pd)//把pd释放，放回复用池
 }
 
 func (c *pollCache) free(pd *pollDesc) {

@@ -21,6 +21,7 @@ var (
 	netpollWakeSig uint32 // used to avoid duplicate calls of netpollBreak
 )
 
+//netpoll初始化
 func netpollinit() {
 	kq = kqueue()
 	if kq < 0 {

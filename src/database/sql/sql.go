@@ -31,8 +31,8 @@ import (
 )
 
 var (
-	driversMu sync.RWMutex
-	drivers   = make(map[string]driver.Driver)
+	driversMu sync.RWMutex//用于保护drivers
+	drivers   = make(map[string]driver.Driver)//map[mysql]Driver
 )
 
 // nowFunc returns the current time; it's overridden in tests.
@@ -41,6 +41,8 @@ var nowFunc = time.Now
 // Register makes a database driver available by the provided name.
 // If Register is called twice with the same name or if driver is nil,
 // it panics.
+// 注册名字为name的数据库驱动，如name=mysql，driver=对应驱动。
+// 协程安全
 func Register(name string, driver driver.Driver) {
 	driversMu.Lock()
 	defer driversMu.Unlock()
@@ -52,7 +54,8 @@ func Register(name string, driver driver.Driver) {
 	}
 	drivers[name] = driver
 }
-
+//协程安全
+//注销/清除全部已注册的driver
 func unregisterAllDrivers() {
 	driversMu.Lock()
 	defer driversMu.Unlock()
@@ -61,6 +64,7 @@ func unregisterAllDrivers() {
 }
 
 // Drivers returns a sorted list of the names of the registered drivers.
+// Drivers 返回根据name排序的全部数据库驱动
 func Drivers() []string {
 	driversMu.RLock()
 	defer driversMu.RUnlock()
@@ -87,17 +91,21 @@ type NamedArg struct {
 	// used.
 	//
 	// Name must omit any symbol prefix.
+	// 参数占位符的名字，如 @user_name
+	// 如果空，则使用参数列表里的序数（第几个参数）
+	// Name的值不含有任何符号前缀，比如上面的@user_name, 只有user_name存到Name里，可参考Named函数的示例
 	Name string
 
 	// Value is the value of the parameter.
 	// It may be assigned the same value types as the query
 	// arguments.
+	// 参数的值
 	Value any
 }
 
-// Named provides a more concise way to create NamedArg values.
+// Named 函数提供更简洁的方式创建NamedArg命名参数实例
 //
-// Example usage:
+// 使用示例:
 //
 //     db.ExecContext(ctx, `
 //         delete from Invoice
@@ -108,10 +116,9 @@ type NamedArg struct {
 //         sql.Named("end", endTime),
 //     )
 func Named(name string, value any) NamedArg {
-	// This method exists because the go1compat promise
-	// doesn't guarantee that structs don't grow more fields,
-	// so unkeyed struct literals are a vet error. Thus, we don't
-	// want to allow sql.NamedArg{name, value}.
+	// 这个函数之所以存在，是因为go1compat承诺但不保证NamedArg结构体不会增加更多字段，
+	// 所以通过直接创建NamedArg实例的方式可能会有错误，因此不太希望允许直接通过 sql.NamedArg{name, value}
+	// 的方式创建实例
 	return NamedArg{Name: name, Value: value}
 }
 
@@ -456,19 +463,19 @@ var ErrNoRows = errors.New("sql: no rows in result set")
 type DB struct {
 	// Atomic access only. At top of struct to prevent mis-alignment
 	// on 32-bit platforms. Of type time.Duration.
-	waitDuration int64 // Total time waited for new connections.
+	waitDuration int64 // 请求等待空闲连接的总时长（统计字段） Total time waited for new connections.
 
-	connector driver.Connector
+	connector driver.Connector//具体数据库的连接器，用于创建新连接
 	// numClosed is an atomic counter which represents a total number of
 	// closed connections. Stmt.openStmt checks it before cleaning closed
 	// connections in Stmt.css.
 	numClosed uint64
 
-	mu           sync.Mutex    // protects following fields
-	freeConn     []*driverConn // free connections ordered by returnedAt oldest to newest
-	connRequests map[uint64]chan connRequest
-	nextRequest  uint64 // Next key to use in connRequests.
-	numOpen      int    // number of opened and pending open connections
+	mu           sync.Mutex    // 保护下面的字段
+	freeConn     []*driverConn // 连接池 free connections ordered by returnedAt oldest to newest
+	connRequests map[uint64]chan connRequest//等待可用连接的请求
+	nextRequest  uint64 // 作为connRequests字段map的key（唯一标识）
+	numOpen      int    // 已建立连接的个数 number of opened and pending open connections
 	// Used to signal the need for new connections
 	// a goroutine running connectionOpener() reads on this chan and
 	// maybeOpenNewConnections sends on the chan (one send per needed connection)
@@ -480,26 +487,29 @@ type DB struct {
 	lastPut           map[*driverConn]string // stacktrace of last conn's put; debug only
 	maxIdleCount      int                    // zero means defaultMaxIdleConns; negative means 0
 	maxOpen           int                    // <= 0 means unlimited
-	maxLifetime       time.Duration          // maximum amount of time a connection may be reused
-	maxIdleTime       time.Duration          // maximum amount of time a connection may be idle before being closed
-	cleanerCh         chan struct{}
-	waitCount         int64 // Total number of connections waited for.
-	maxIdleClosed     int64 // Total number of connections closed due to idle count.
-	maxIdleTimeClosed int64 // Total number of connections closed due to idle time.
-	maxLifetimeClosed int64 // Total number of connections closed due to max connection lifetime limit.
+	maxLifetime       time.Duration          // 最大可用时长 maximum amount of time a connection may be reused
+	maxIdleTime       time.Duration          // 最大空闲时长 maximum amount of time a connection may be idle before being closed
+	cleanerCh         chan struct{}			 //
+	waitCount         int64 // 等待n个连接 Total number of connections waited for.
+	maxIdleClosed     int64 // 因达到最大空闲连接数而被关闭的个数
+	maxIdleTimeClosed int64 // 因达到最大空闲时长而被关闭的连接个数
+	maxLifetimeClosed int64 // 因达到最大使用时长而被关闭的连接个数
 
 	stop func() // stop cancels the connection opener.
 }
 
 // connReuseStrategy determines how (*DB).conn returns database connections.
+// 连接复用策略
 type connReuseStrategy uint8
 
 const (
 	// alwaysNewConn forces a new connection to the database.
+	// 当连接不够用时，总是新建连接（无视最大连接数限制）
 	alwaysNewConn connReuseStrategy = iota
 	// cachedOrNewConn returns a cached connection, if available, else waits
 	// for one to become available (if MaxOpenConns has been reached) or
 	// creates a new database connection.
+	// 当连接不够用时，等待空闲连接
 	cachedOrNewConn
 )
 
@@ -507,24 +517,27 @@ const (
 // be held during all calls into the Conn. (including any calls onto
 // interfaces returned via that Conn, such as calls on Tx, Stmt,
 // Result, Rows)
+// driver.Conn连接的封装，ci指向低一层的连接，其他字段用以存放连接的信息
 type driverConn struct {
 	db        *DB
-	createdAt time.Time
+	createdAt time.Time //连接建立的时间点
 
-	sync.Mutex  // guards following
-	ci          driver.Conn
-	needReset   bool // The connection session should be reset before use if true.
-	closed      bool
-	finalClosed bool // ci.Close has been called
+	sync.Mutex  // 保护以下字段
+	ci          driver.Conn//底层连接
+	needReset   bool // 连接上的会话在使用前是否需要重置 The connection session should be reset before use if true.
+	closed      bool // 连接是否已关闭，调用Close时置为true
+	finalClosed bool // 底层连接是否被关闭，也即是否有调用ci.Close方法
 	openStmt    map[*driverStmt]bool
 
 	// guarded by db.mu
-	inUse      bool
-	returnedAt time.Time // Time the connection was created or returned.
-	onPut      []func()  // code (with db.mu held) run when conn is next returned
+	// 以下连接由db字段的mu锁保护
+	inUse      bool //连接是否正在被使用
+	returnedAt time.Time // 连接建立时的时间点 或 连接被放入池时的时间点
+	onPut      []func()  // 连接在被放回池时，执行的回调函数，只会执行一次，完后onPut会被清空 code (with db.mu held) run when conn is next returned
 	dbmuClosed bool      // same as closed, but guarded by db.mu, for removeClosedStmtLocked
 }
 
+//把连接放回池
 func (dc *driverConn) releaseConn(err error) {
 	dc.db.putConn(dc, err, true)
 }
@@ -535,6 +548,7 @@ func (dc *driverConn) removeOpenStmt(ds *driverStmt) {
 	delete(dc.openStmt, ds)
 }
 
+// 返回true过期，false未过期
 func (dc *driverConn) expired(timeout time.Duration) bool {
 	if timeout <= 0 {
 		return false
@@ -551,6 +565,7 @@ func (dc *driverConn) resetSession(ctx context.Context) error {
 	if !dc.needReset {
 		return nil
 	}
+	//重置连接上的会话（调用具体驱动的实现）
 	if cr, ok := dc.ci.(driver.SessionResetter); ok {
 		return cr.ResetSession(ctx)
 	}
@@ -567,7 +582,7 @@ func (dc *driverConn) validateConnection(needsReset bool) bool {
 		dc.needReset = true
 	}
 	if cv, ok := dc.ci.(driver.Validator); ok {
-		return cv.IsValid()
+		return cv.IsValid()//检查连接是否有效
 	}
 	return true
 }
@@ -598,6 +613,7 @@ func (dc *driverConn) prepareLocked(ctx context.Context, cg stmtConnGrabber, que
 }
 
 // the dc.db's Mutex is held.
+// 调用本方法前需持有 dc.db.mu锁
 func (dc *driverConn) closeDBLocked() func() error {
 	dc.Lock()
 	defer dc.Unlock()
@@ -608,6 +624,7 @@ func (dc *driverConn) closeDBLocked() func() error {
 	return dc.db.removeDepLocked(dc, dc)
 }
 
+//连接关闭
 func (dc *driverConn) Close() error {
 	dc.Lock()
 	if dc.closed {
@@ -643,16 +660,16 @@ func (dc *driverConn) finalClose() error {
 	}
 	withLock(dc, func() {
 		dc.finalClosed = true
-		err = dc.ci.Close()
+		err = dc.ci.Close()//关闭底层连接
 		dc.ci = nil
 	})
 
 	dc.db.mu.Lock()
-	dc.db.numOpen--
-	dc.db.maybeOpenNewConnections()
+	dc.db.numOpen--//更新打开的连接数
+	dc.db.maybeOpenNewConnections()//打开新的连接
 	dc.db.mu.Unlock()
 
-	atomic.AddUint64(&dc.db.numClosed, 1)
+	atomic.AddUint64(&dc.db.numClosed, 1)//已关闭的连接数更新
 	return err
 }
 
@@ -675,7 +692,7 @@ func (ds *driverStmt) Close() error {
 		return ds.closeErr
 	}
 	ds.closed = true
-	ds.closeErr = ds.si.Close()
+	ds.closeErr = ds.si.Close()//关闭底层的driver.Stmt
 	return ds.closeErr
 }
 
@@ -781,6 +798,7 @@ func (t dsnConnector) Driver() driver.Driver {
 // and maintains its own pool of idle connections. Thus, the OpenDB
 // function should be called just once. It is rarely necessary to
 // close a DB.
+// 返回一个含有连接池的 sql.DB，OpenDB本身不会真正建立连接
 func OpenDB(c driver.Connector) *DB {
 	ctx, cancel := context.WithCancel(context.Background())
 	db := &DB{
@@ -813,14 +831,16 @@ func OpenDB(c driver.Connector) *DB {
 // and maintains its own pool of idle connections. Thus, the Open
 // function should be called just once. It is rarely necessary to
 // close a DB.
+// Open 打开一个指定name数据库的连接，name和驱动需提前调用sql.Register函数注册
 func Open(driverName, dataSourceName string) (*DB, error) {
 	driversMu.RLock()
-	driveri, ok := drivers[driverName]
+	driveri, ok := drivers[driverName]//取出对应数据库的驱动
 	driversMu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("sql: unknown driver %q (forgotten import?)", driverName)
 	}
 
+	//获取到驱动后，调用OpenConnector方法获取一个connector连接器，后续通过该connector不断建立新的连接
 	if driverCtx, ok := driveri.(driver.DriverContext); ok {
 		connector, err := driverCtx.OpenConnector(dataSourceName)
 		if err != nil {
@@ -1050,6 +1070,7 @@ func (db *DB) SetConnMaxIdleTime(d time.Duration) {
 }
 
 // startCleanerLocked starts connectionCleaner if needed.
+// 启动清理监控程序，把达到最大空闲时长或lifetime的连接关闭
 func (db *DB) startCleanerLocked() {
 	if (db.maxLifetime > 0 || db.maxIdleTime > 0) && db.numOpen > 0 && db.cleanerCh == nil {
 		db.cleanerCh = make(chan struct{}, 1)
@@ -1057,6 +1078,7 @@ func (db *DB) startCleanerLocked() {
 	}
 }
 
+//负责把达到最大空闲时长或lifetime的连接关闭
 func (db *DB) connectionCleaner(d time.Duration) {
 	const minInterval = time.Second
 
@@ -1074,7 +1096,7 @@ func (db *DB) connectionCleaner(d time.Duration) {
 		db.mu.Lock()
 
 		d = db.shortestIdleTimeLocked()
-		if db.closed || db.numOpen == 0 || d <= 0 {
+		if db.closed || db.numOpen == 0 || d <= 0 {//db关闭了，或已无建立的连接了
 			db.cleanerCh = nil
 			db.mu.Unlock()
 			return
@@ -1082,7 +1104,7 @@ func (db *DB) connectionCleaner(d time.Duration) {
 
 		d, closing := db.connectionCleanerRunLocked(d)
 		db.mu.Unlock()
-		for _, c := range closing {
+		for _, c := range closing {//把连接关闭
 			c.Close()
 		}
 
@@ -1103,6 +1125,7 @@ func (db *DB) connectionCleaner(d time.Duration) {
 // connectionCleanerRunLocked removes connections that should be closed from
 // freeConn and returns them along side an updated duration to the next check
 // if a quicker check is required to ensure connections are checked appropriately.
+// 把在池里的，达到最大空闲时长或lifetime的连接关闭，并放回下一次需执行本方法的时间
 func (db *DB) connectionCleanerRunLocked(d time.Duration) (time.Duration, []*driverConn) {
 	var idleClosing int64
 	var closing []*driverConn
@@ -1199,24 +1222,24 @@ func (db *DB) Stats() DBStats {
 	return stats
 }
 
-// Assumes db.mu is locked.
-// If there are connRequests and the connection limit hasn't been reached,
-// then tell the connectionOpener to open new connections.
+// 调用本方法前都假设持有 db.mu锁
+// 如果有等待空闲连接的请求并且未达最大连接数限制时，
+// 通过db.openerCh chan的方式通知 connectionOpener 异步创建新连接
 func (db *DB) maybeOpenNewConnections() {
 	numRequests := len(db.connRequests)
-	if db.maxOpen > 0 {
-		numCanOpen := db.maxOpen - db.numOpen
+	if db.maxOpen > 0 {//设置了最大连接数限制
+		numCanOpen := db.maxOpen - db.numOpen//还可以创建的连接数
 		if numRequests > numCanOpen {
 			numRequests = numCanOpen
 		}
 	}
-	for numRequests > 0 {
+	for numRequests > 0 {//通知numRequests次connectionOpener，每次通知建立一个新连接
 		db.numOpen++ // optimistically
 		numRequests--
 		if db.closed {
 			return
 		}
-		db.openerCh <- struct{}{}
+		db.openerCh <- struct{}{}//1000000个缓冲位
 	}
 }
 
@@ -1233,16 +1256,17 @@ func (db *DB) connectionOpener(ctx context.Context) {
 }
 
 // Open one new connection
+// 打开/创建一个新连接
 func (db *DB) openNewConnection(ctx context.Context) {
 	// maybeOpenNewConnections has already executed db.numOpen++ before it sent
 	// on db.openerCh. This function must execute db.numOpen-- if the
 	// connection fails or is closed before returning.
-	ci, err := db.connector.Connect(ctx)
+	ci, err := db.connector.Connect(ctx)//通过连接器创建新连接
 	db.mu.Lock()
 	defer db.mu.Unlock()
-	if db.closed {
+	if db.closed {//如果db被关闭了
 		if err == nil {
-			ci.Close()
+			ci.Close()//则把刚创建的连接也关闭
 		}
 		db.numOpen--
 		return
@@ -1270,6 +1294,7 @@ func (db *DB) openNewConnection(ctx context.Context) {
 // connRequest represents one request for a new connection
 // When there are no idle connections available, DB.conn will create
 // a new connRequest and put it on the db.connRequests list.
+// 代表新连接上的一个请求，当没空闲连接可用时，DB.conn方法会创建一个新的 connRequest 然后放到 db.connRequests 链表里
 type connRequest struct {
 	conn *driverConn
 	err  error
@@ -1286,16 +1311,17 @@ func (db *DB) nextRequestKeyLocked() uint64 {
 }
 
 // conn returns a newly-opened or cached *driverConn.
+// 返回一个 新建的/从池取的 连接 *driverConn
 func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn, error) {
 	db.mu.Lock()
-	if db.closed {
+	if db.closed {//db已被关闭
 		db.mu.Unlock()
 		return nil, errDBClosed
 	}
 	// Check if the context is expired.
 	select {
 	default:
-	case <-ctx.Done():
+	case <-ctx.Done()://超时上下文
 		db.mu.Unlock()
 		return nil, ctx.Err()
 	}
@@ -1309,7 +1335,8 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 		conn := db.freeConn[last]
 		db.freeConn = db.freeConn[:last]
 		conn.inUse = true
-		if conn.expired(lifetime) {
+		if conn.expired(lifetime) {//连接是否达到最大使用时长
+			//是则需关闭该连接
 			db.maxLifetimeClosed++
 			db.mu.Unlock()
 			conn.Close()
@@ -1326,40 +1353,42 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 		return conn, nil
 	}
 
-	// Out of free connections or we were asked not to use one. If we're not
-	// allowed to open any more connections, make a request and wait.
+	// 连接池没有空闲连接了
+
+	// 如果设置了最大连接数限制，且已建立连接数超过最大连接数限制，
+	// 那么就创建一个connRequest请求实例放入到队列里等待空闲连接
 	if db.maxOpen > 0 && db.numOpen >= db.maxOpen {
 		// Make the connRequest channel. It's buffered so that the
 		// connectionOpener doesn't block while waiting for the req to be read.
 		req := make(chan connRequest, 1)
-		reqKey := db.nextRequestKeyLocked()
-		db.connRequests[reqKey] = req
-		db.waitCount++
+		reqKey := db.nextRequestKeyLocked()//生成该connRequest请求实例的标识
+		db.connRequests[reqKey] = req//放入到等待队列里
+		db.waitCount++//等待连接的请求个数+1
 		db.mu.Unlock()
 
-		waitStart := nowFunc()
+		waitStart := nowFunc()//开始等待的时间点
 
 		// Timeout the connection request with the context.
 		select {
-		case <-ctx.Done():
+		case <-ctx.Done()://如果调用层退出了或等待超时了，则把该等待（请求）删掉。等太久了那只能放弃了
 			// Remove the connection request and ensure no value has been sent
 			// on it after removing.
 			db.mu.Lock()
 			delete(db.connRequests, reqKey)
 			db.mu.Unlock()
 
-			atomic.AddInt64(&db.waitDuration, int64(time.Since(waitStart)))
+			atomic.AddInt64(&db.waitDuration, int64(time.Since(waitStart)))//更新等待总时长
 
 			select {
 			default:
 			case ret, ok := <-req:
-				if ok && ret.conn != nil {
+				if ok && ret.conn != nil {//如果此时请求刚好获取到连接，则放回池里然后退出，不作其他操作了
 					db.putConn(ret.conn, ret.err, false)
 				}
 			}
 			return nil, ctx.Err()
 		case ret, ok := <-req:
-			atomic.AddInt64(&db.waitDuration, int64(time.Since(waitStart)))
+			atomic.AddInt64(&db.waitDuration, int64(time.Since(waitStart)))//更新等待总时长
 
 			if !ok {
 				return nil, errDBClosed
@@ -1371,6 +1400,7 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 			// This prioritizes giving a valid connection to a client over the exact connection
 			// lifetime, which could expire exactly after this point anyway.
 			if strategy == cachedOrNewConn && ret.err == nil && ret.conn.expired(lifetime) {
+				//连接过期
 				db.mu.Lock()
 				db.maxLifetimeClosed++
 				db.mu.Unlock()
@@ -1381,7 +1411,9 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 				return nil, ret.err
 			}
 
-			// Reset the session if required.
+			//获取到的连接可用
+
+			// 重置会话
 			if err := ret.conn.resetSession(ctx); errors.Is(err, driver.ErrBadConn) {
 				ret.conn.Close()
 				return nil, err
@@ -1390,9 +1422,13 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 		}
 	}
 
-	db.numOpen++ // optimistically
+	// 未设置最大连接限制 或 未达到最大连接限制
+
+	db.numOpen++ // 更新已建立连接个数
 	db.mu.Unlock()
-	ci, err := db.connector.Connect(ctx)
+
+	//创建新连接
+	ci, err := db.connector.Connect(ctx)//通过连接器创建一个新连接
 	if err != nil {
 		db.mu.Lock()
 		db.numOpen-- // correct for earlier optimism
@@ -1401,7 +1437,7 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 		return nil, err
 	}
 	db.mu.Lock()
-	dc := &driverConn{
+	dc := &driverConn{//创建新连接
 		db:         db,
 		createdAt:  nowFunc(),
 		returnedAt: nowFunc(),
@@ -1442,6 +1478,7 @@ const debugGetPut = false
 
 // putConn adds a connection to the db's free pool.
 // err is optionally the last error that occurred on this connection.
+// 把dc连接放回池里，err可能是dc连接上遇到的最后一个错误
 func (db *DB) putConn(dc *driverConn, err error, resetSession bool) {
 	if !errors.Is(err, driver.ErrBadConn) {
 		if !dc.validateConnection(resetSession) {
@@ -1458,38 +1495,36 @@ func (db *DB) putConn(dc *driverConn, err error, resetSession bool) {
 	}
 
 	if !errors.Is(err, driver.ErrBadConn) && dc.expired(db.maxLifetime) {
-		db.maxLifetimeClosed++
+		db.maxLifetimeClosed++//连接已达最大使用时长，需要关闭
 		err = driver.ErrBadConn
 	}
 	if debugGetPut {
 		db.lastPut[dc] = stack()
 	}
-	dc.inUse = false
-	dc.returnedAt = nowFunc()
+	dc.inUse = false//归还连接给连接池时
+	dc.returnedAt = nowFunc()//归还时间点
 
 	for _, fn := range dc.onPut {
 		fn()
 	}
 	dc.onPut = nil
 
-	if errors.Is(err, driver.ErrBadConn) {
-		// Don't reuse bad connections.
-		// Since the conn is considered bad and is being discarded, treat it
-		// as closed. Don't decrement the open count here, finalClose will
-		// take care of that.
-		db.maybeOpenNewConnections()
+	if errors.Is(err, driver.ErrBadConn) {//归还的连接有异常，需要关闭，然后建新连接
+		// 连接出现异常，此时不应再使用该连接，把它关闭并建新连接
+		// 无需更新 db.numOpen 的值，finalClose 方法会处理该值
+		db.maybeOpenNewConnections()//尝试打开新连接（异步）
 		db.mu.Unlock()
-		dc.Close()
+		dc.Close()//关闭旧连接
 		return
 	}
 	if putConnHook != nil {
 		putConnHook(db, dc)
 	}
-	added := db.putConnDBLocked(dc, nil)
+	added := db.putConnDBLocked(dc, nil)//连接回池
 	db.mu.Unlock()
 
-	if !added {
-		dc.Close()
+	if !added {//连接无法放入池里（即已建立连接的个数超过了最大连接数限制或其他原因）
+		dc.Close()//则关闭/释放该连接
 		return
 	}
 }
@@ -1503,20 +1538,23 @@ func (db *DB) putConn(dc *driverConn, err error, resetSession bool) {
 // If err == nil, then dc must not equal nil.
 // If a connRequest was fulfilled or the *driverConn was placed in the
 // freeConn list, then true is returned, otherwise false is returned.
+// 把dc连接放入池里，如果传入的err不为nil，则dc的入参值会被忽略
+// 如果err为nil，则dc参不可为nil
+// 如果等待队列里有请求，则直接把dc给该请求
 func (db *DB) putConnDBLocked(dc *driverConn, err error) bool {
 	if db.closed {
 		return false
 	}
-	if db.maxOpen > 0 && db.numOpen > db.maxOpen {
+	if db.maxOpen > 0 && db.numOpen > db.maxOpen {//连接太多了，超过最大限制
 		return false
 	}
-	if c := len(db.connRequests); c > 0 {
+	if c := len(db.connRequests); c > 0 {//有在等待空闲连接的请求
 		var req chan connRequest
 		var reqKey uint64
-		for reqKey, req = range db.connRequests {
+		for reqKey, req = range db.connRequests {//随机取一个key
 			break
 		}
-		delete(db.connRequests, reqKey) // Remove from pending requests.
+		delete(db.connRequests, reqKey) // 从等待队列里移除
 		if err == nil {
 			dc.inUse = true
 		}
@@ -1526,12 +1564,12 @@ func (db *DB) putConnDBLocked(dc *driverConn, err error) bool {
 		}
 		return true
 	} else if err == nil && !db.closed {
-		if db.maxIdleConnsLocked() > len(db.freeConn) {
+		if db.maxIdleConnsLocked() > len(db.freeConn) {//未达到最大空闲个数限制，则放入池里
 			db.freeConn = append(db.freeConn, dc)
-			db.startCleanerLocked()
+			db.startCleanerLocked()//启动连接清除监控程序
 			return true
 		}
-		db.maxIdleClosed++
+		db.maxIdleClosed++//因达到最大空闲个数而被关闭的总次数
 	}
 	return false
 }
@@ -1920,6 +1958,9 @@ var ErrConnDone = errors.New("sql: connection is already closed")
 //
 // Every Conn must be returned to the database pool after use by
 // calling Conn.Close.
+// 新建/从池里拿出 一个连接，本方法会阻塞直到有连接返回或ctx被取消
+// 连接上的查询请求会在同一个数据库会话里执行
+// 每个调用Conn.Close进行关闭的连接都会被放回池里
 func (db *DB) Conn(ctx context.Context) (*Conn, error) {
 	var dc *driverConn
 	var err error
@@ -1977,7 +2018,7 @@ type Conn struct {
 // grabConn takes a context to implement stmtConnGrabber
 // but the context is not used.
 func (c *Conn) grabConn(context.Context) (*driverConn, releaseConn, error) {
-	if atomic.LoadInt32(&c.done) != 0 {
+	if atomic.LoadInt32(&c.done) != 0 {//连接已被关闭
 		return nil, nil, ErrConnDone
 	}
 	c.closemu.RLock()
@@ -1985,6 +2026,7 @@ func (c *Conn) grabConn(context.Context) (*driverConn, releaseConn, error) {
 }
 
 // PingContext verifies the connection to the database is still alive.
+// 验证数据库连接是否正常
 func (c *Conn) PingContext(ctx context.Context) error {
 	dc, release, err := c.grabConn(ctx)
 	if err != nil {
@@ -2104,8 +2146,9 @@ func (c *Conn) txCtx() context.Context {
 	return nil
 }
 
+// 关闭连接，此时把done字段置为1
 func (c *Conn) close(err error) error {
-	if !atomic.CompareAndSwapInt32(&c.done, 0, 1) {
+	if !atomic.CompareAndSwapInt32(&c.done, 0, 1) {//更新done标识
 		return ErrConnDone
 	}
 
@@ -2114,7 +2157,7 @@ func (c *Conn) close(err error) error {
 	c.closemu.Lock()
 	defer c.closemu.Unlock()
 
-	c.dc.releaseConn(err)
+	c.dc.releaseConn(err)//把连接放回池
 	c.dc = nil
 	c.db = nil
 	return err
@@ -2154,7 +2197,7 @@ type Tx struct {
 
 	// releaseConn is called once the Tx is closed to release
 	// any held driverConn back to the pool.
-	releaseConn func(error)
+	releaseConn func(error)//连接释放函数，当Tx事务关闭时，调用本函数进行连接释放
 
 	// done transitions from 0 to 1 exactly once, on Commit
 	// or Rollback. once done, all operations fail with
@@ -3431,6 +3474,7 @@ func stack() string {
 }
 
 // withLock runs while holding lk.
+// 在持有lk锁的情况下执行fn
 func withLock(lk sync.Locker, fn func()) {
 	lk.Lock()
 	defer lk.Unlock() // in case fn panics

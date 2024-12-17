@@ -19,7 +19,7 @@ import (
 type FD struct {
 	// Lock sysfd and serialize access to Read and Write methods.
 	// sysfd锁，用于序列化访问 Read 和 Write 方法
-	fdmu fdMutex//该字段用于引用计数
+	fdmu fdMutex//该字段用于保护引用计数的并发安全
 
 	// 系统的文件描述符fd，不可变更，只会在 Close 关闭时变为-1
 	Sysfd int

@@ -20,7 +20,7 @@ func runtimeNano() int64
 
 func runtime_pollServerInit()
 func runtime_pollOpen(fd uintptr) (uintptr, int)
-func runtime_pollClose(ctx uintptr)
+func runtime_pollClose(ctx uintptr) // 把pd指向的底层fd从epoll的监听队列移除
 func runtime_pollWait(ctx uintptr, mode int) int
 func runtime_pollWaitCanceled(ctx uintptr, mode int) int
 func runtime_pollReset(ctx uintptr, mode int) int
@@ -28,16 +28,17 @@ func runtime_pollSetDeadline(ctx uintptr, d int64, mode int)
 func runtime_pollUnblock(ctx uintptr)
 func runtime_isPollServerDescriptor(fd uintptr) bool
 
-//是底层epoll的封装
+//是底层系统fd的封装，负责fd和epoll的交互
 type pollDesc struct {
-	runtimeCtx uintptr
+	runtimeCtx uintptr //指向底层的系统fd
 }
 
 var serverInit sync.Once
 
+//初始化对fd.Sysfd的poll监听
 func (pd *pollDesc) init(fd *FD) error {
-	serverInit.Do(runtime_pollServerInit)
-	ctx, errno := runtime_pollOpen(uintptr(fd.Sysfd))//底层是把fd对应的系统fd添加到epoll的监控队列里，ctx是代表fd的对象（该fd已被监听，使用了 runtime.pollDesc对象来代表被监听的fd）
+	serverInit.Do(runtime_pollServerInit)//初始化对应系统平台的epoll
+	ctx, errno := runtime_pollOpen(uintptr(fd.Sysfd))//把fd.Sysfd指向的系统fd添加到epoll的监听队列里，底层是把fd对应的系统fd添加到epoll的监听队列里，返回的ctx是代表fd的对象（该fd已被监听，使用了 runtime.pollDesc对象来代表被监听的fd）
 	if errno != 0 {
 		return errnoErr(syscall.Errno(errno))
 	}
@@ -45,7 +46,7 @@ func (pd *pollDesc) init(fd *FD) error {
 	return nil
 }
 
-//把pd.runtimeCtx底层的fd从监听队列移除，并归还底层runtime.pollDesc对象到复用池
+//把pd.runtimeCtx底层的fd从epoll的监听队列移除，并归还底层runtime.pollDesc对象到复用池
 func (pd *pollDesc) close() {
 	if pd.runtimeCtx == 0 {
 		return

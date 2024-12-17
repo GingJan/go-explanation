@@ -309,13 +309,14 @@ type Getter interface {
 }
 
 // ErrorHandling defines how FlagSet.Parse behaves if the parse fails.
+// ErrorHandling 如果解析失败，ErrorHandling定义了 FlagSet.Parse 的行为
 type ErrorHandling int
 
 // These constants cause FlagSet.Parse to behave as described if the parse fails.
 const (
-	ContinueOnError ErrorHandling = iota // Return a descriptive error.
-	ExitOnError                          // Call os.Exit(2) or for -h/-help Exit(0).
-	PanicOnError                         // Call panic with a descriptive error.
+	ContinueOnError ErrorHandling = iota // 只返回描述性错误err
+	ExitOnError                          // 当err错误为ErrHelp时调用os.Exit(0)提出 或 直接调用 os.Exit(2)退出
+	PanicOnError                         // 抛出含有err错误的panic，panic(err)
 )
 
 // A FlagSet represents a set of defined flags. The zero value of a FlagSet
@@ -324,20 +325,19 @@ const (
 // Flag names must be unique within a FlagSet. An attempt to define a flag whose
 // name is already in use will cause a panic.
 type FlagSet struct {
-	// Usage is the function called when an error occurs while parsing flags.
-	// The field is a function (not a method) that may be changed to point to
-	// a custom error handler. What happens after Usage is called depends
-	// on the ErrorHandling setting; for the command line, this defaults
-	// to ExitOnError, which exits the program after calling Usage.
+	// 在解析flag时，当发生错误则调用Usage函数
+	// 该字段是一个函数而不是方法，可被修改为指向自定义错误处理函数。
+	// 在调用Usage函数之后的处理逻辑则取决于 ErrorHandling 的取值了
+	// 对于命令行，ErrorHandling 默认为 ExitOnError，也即在调用Usage后退出程序
 	Usage func()
 
 	name          string
-	parsed        bool
+	parsed        bool //是否已经解析
 	actual        map[string]*Flag
 	formal        map[string]*Flag
-	args          []string // arguments after flags
-	errorHandling ErrorHandling
-	output        io.Writer // nil means stderr; use Output() accessor
+	args          []string // 命令名后的参数 arguments after flags
+	errorHandling ErrorHandling //默认是0 = ContinueOnError
+	output        io.Writer // nil则表示输出到标准错误stderr，用于Output()方法
 }
 
 // A Flag represents the state of a flag.
@@ -345,7 +345,7 @@ type Flag struct {
 	Name     string // name as it appears on command line
 	Usage    string // help message
 	Value    Value  // value as set
-	DefValue string // default value (as text); for usage message
+	DefValue string // 默认值（文案形式）default value (as text); for usage message
 }
 
 // sortFlags returns the flags as a slice in lexicographical sorted order.
@@ -362,8 +362,7 @@ func sortFlags(flags map[string]*Flag) []*Flag {
 	return result
 }
 
-// Output returns the destination for usage and error messages. os.Stderr is returned if
-// output was not set or was set to nil.
+// Output 返回 Usage 和错误信息的输出目的地
 func (f *FlagSet) Output() io.Writer {
 	if f.output == nil {
 		return os.Stderr
@@ -381,8 +380,7 @@ func (f *FlagSet) ErrorHandling() ErrorHandling {
 	return f.errorHandling
 }
 
-// SetOutput sets the destination for usage and error messages.
-// If output is nil, os.Stderr is used.
+// SetOutput 设置 Usage() 函数 和 错误信息的输出方式。如果output字段是nil，在输出到标准错误 os.Stderr
 func (f *FlagSet) SetOutput(output io.Writer) {
 	f.output = output
 }
@@ -450,6 +448,7 @@ func Set(name, value string) error {
 
 // isZeroValue determines whether the string represents the zero
 // value for a flag.
+// 判断flag的值是否value代表的「零值」（也即所谓的「零值」其实是可以自定义的）
 func isZeroValue(flag *Flag, value string) bool {
 	// Build a zero value of the flag's Value type, and see if the
 	// result of calling its String method equals the value passed in.
@@ -526,7 +525,7 @@ func (f *FlagSet) PrintDefaults() {
 		}
 		b.WriteString(strings.ReplaceAll(usage, "\n", "\n    \t"))
 
-		if !isZeroValue(flag, flag.DefValue) {
+		if !isZeroValue(flag, flag.DefValue) { //非「零值」
 			if _, ok := flag.Value.(*stringValue); ok {
 				// put quotes on the value
 				fmt.Fprintf(&b, " (default %q)", flag.DefValue)
@@ -534,7 +533,7 @@ func (f *FlagSet) PrintDefaults() {
 				fmt.Fprintf(&b, " (default %v)", flag.DefValue)
 			}
 		}
-		fmt.Fprint(f.Output(), b.String(), "\n")
+		fmt.Fprint(f.Output(), b.String(), "\n")//把提示信息输出到 f.Output() 返回的目的地里
 	})
 }
 
@@ -563,7 +562,7 @@ func PrintDefaults() {
 	CommandLine.PrintDefaults()
 }
 
-// defaultUsage is the default function to print a usage message.
+// defaultUsage 默认的 usage说明 打印函数
 func (f *FlagSet) defaultUsage() {
 	if f.name == "" {
 		fmt.Fprintf(f.Output(), "Usage:\n")
@@ -998,11 +997,12 @@ func (f *FlagSet) parseOne() (bool, error) {
 // include the command name. Must be called after all flags in the FlagSet
 // are defined and before flags are accessed by the program.
 // The return value will be ErrHelp if -help or -h were set but not defined.
+// Parse 解析命令名后的参数项
 func (f *FlagSet) Parse(arguments []string) error {
 	f.parsed = true
 	f.args = arguments
 	for {
-		seen, err := f.parseOne()
+		seen, err := f.parseOne()//逐个参数项进行解析
 		if seen {
 			continue
 		}
@@ -1029,29 +1029,28 @@ func (f *FlagSet) Parsed() bool {
 	return f.parsed
 }
 
-// Parse parses the command-line flags from os.Args[1:]. Must be called
-// after all flags are defined and before flags are accessed by the program.
+// Parse 从os.Args[1:]处读取并解析为command-line的flags，必须要在全部flags定义后且flags被程序访问/使用前调用
 func Parse() {
 	// Ignore errors; CommandLine is set for ExitOnError.
 	CommandLine.Parse(os.Args[1:])
 }
 
-// Parsed reports whether the command-line flags have been parsed.
+// Parsed 判断是否已经调用了Parse()函数进行参数解析
 func Parsed() bool {
 	return CommandLine.Parsed()
 }
 
-// CommandLine is the default set of command-line flags, parsed from os.Args.
-// The top-level functions such as BoolVar, Arg, and so on are wrappers for the
-// methods of CommandLine.
-var CommandLine = NewFlagSet(os.Args[0], ExitOnError)
+// CommandLine 默认的命令行参数集合（全局）。
+// 读取了os.Args里的数据并解析为CommandLine
+// 顶层的函数如 BoolVar ， Arg 等等都是封装了CommandLine的方法（底层调用的都是CommandLine对应的方法）
+var CommandLine = NewFlagSet(os.Args[0], ExitOnError) //CommandLine本质就是一个FlagSet实例
 
 func init() {
 	// Override generic FlagSet default Usage with call to global Usage.
 	// Note: This is not CommandLine.Usage = Usage,
 	// because we want any eventual call to use any updated value of Usage,
 	// not the value it has when this line is run.
-	CommandLine.Usage = commandLineUsage
+	CommandLine.Usage = commandLineUsage //预定于的Usage函数
 }
 
 func commandLineUsage() {
@@ -1063,16 +1062,14 @@ func commandLineUsage() {
 // in the default usage message and in error messages.
 func NewFlagSet(name string, errorHandling ErrorHandling) *FlagSet {
 	f := &FlagSet{
-		name:          name,
-		errorHandling: errorHandling,
+		name:          name,//该FlagSet实例的name
+		errorHandling: errorHandling, //错误处理方式
 	}
 	f.Usage = f.defaultUsage
 	return f
 }
 
-// Init sets the name and error handling property for a flag set.
-// By default, the zero FlagSet uses an empty name and the
-// ContinueOnError error handling policy.
+// Init 初始化设置FlagSet实例的name和errorHandling
 func (f *FlagSet) Init(name string, errorHandling ErrorHandling) {
 	f.name = name
 	f.errorHandling = errorHandling

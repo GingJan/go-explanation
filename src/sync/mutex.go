@@ -112,14 +112,14 @@ func (m *Mutex) TryLock() bool {
 func (m *Mutex) lockSlow() {
 	var waitStartTime int64
 	starving := false//是否饥饿模式
-	awoke := false//本G是否已从睡眠模式中唤醒
+	awoke := false//G是否已从等待队列里唤醒
 	iter := 0
 	old := m.state
 	for {
 		// Don't spin in starvation mode, ownership is handed off to waiters
 		// so we won't be able to acquire the mutex anyway.
 		// 不在饥饿模式下才自旋，饥饿模式下锁所有权是直接交给等待G的，
-		// 所以本g（新来尝试获取锁的g）在饥饿模式下是没法获取锁，没必须进行自旋浪费CPU，进入睡眠即可
+		// 所以本g（新来尝试获取锁的g）在饥饿模式下是没法获取锁，没必要进行自旋浪费CPU，进入睡眠即可
 		if old&(mutexLocked|mutexStarving) == mutexLocked && runtime_canSpin(iter) {
 			// 锁不处于饥饿模式且处于上锁态中 && 可以自旋，则
 			// 尝试设置 mutexWoken标志 以通知 Unlock 不要唤醒其他被阻塞的G（为了把锁能优先给新来的G）
@@ -132,7 +132,7 @@ func (m *Mutex) lockSlow() {
 				awoke = true
 			}
 			runtime_doSpin()//底层是调用procyield实现自旋，通过执行30次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
-			iter++
+			iter++//计算自旋次数
 			old = m.state//此时，old=1011
 			continue
 		}
@@ -151,14 +151,15 @@ func (m *Mutex) lockSlow() {
 		// But if the mutex is currently unlocked, don't do the switch.
 		// Unlock expects that starving mutex has waiters, which will not
 		// be true in this case.
-		// G被唤醒后，若当前锁依旧处于上锁态，则把锁切换到饥饿模式
+		// G被唤醒后，若当前锁依旧处于上锁态（或被新来的G抢占了），则把锁切换到饥饿模式，
+		// G也进入饥饿态，等新来的G释放锁后，锁直接给该G
 		if starving && old&mutexLocked != 0 {
 			new |= mutexStarving//锁切换到饥饿模式
 		}
 		if awoke {
 			// The goroutine has been woken from sleep,
 			// so we need to reset the flag in either case.
-			// G已从睡眠中唤醒，因此重置睡眠位
+			// G已从睡眠中唤醒，因此重置锁的唤醒标志位
 			if new&mutexWoken == 0 {
 				throw("sync: inconsistent mutex state")
 			}
@@ -169,16 +170,16 @@ func (m *Mutex) lockSlow() {
 				break // locked the mutex with CAS
 			}
 			// If we were already waiting before, queue at the front of the queue.
-			// 如果本G已经等待过一次了（本次是第n次尝试获取锁），则直接排到等待队列的队头
+			// 如果本G已经等待过一次了（本次是第n次尝试获取锁），则直接放到等待队列的队头
 			queueLifo := waitStartTime != 0
 			if waitStartTime == 0 {
 				//第一次尝试获取锁
 				waitStartTime = runtime_nanotime()//开始等待锁的时间
 			}
-			runtime_SemacquireMutex(&m.sema, queueLifo, 1)//阻塞挂起，等待锁释放的信号量
+			runtime_SemacquireMutex(&m.sema, queueLifo, 1)//阻塞挂起，等待锁释放的信号量，同时把G放到队列
 
-			// 恢复运行
-			// 先判断下已经等待了多久，超过10ms则把锁切换为饥饿模式
+			// 某个G恢复运行
+
 			starving = starving || runtime_nanotime()-waitStartTime > starvationThresholdNs//当g等待锁的时间超过10ms，则切换为饥饿模式
 			old = m.state
 			if old&mutexStarving != 0 {//锁处于饥饿模式
@@ -260,7 +261,7 @@ func (m *Mutex) unlockSlow(new int32) {
 			// Grab the right to wake someone.
 			// 等待队列里还有G，则唤醒一个G，并且把所有权交给唤醒的G
 			new = (old - 1<<mutexWaiterShift) | mutexWoken //唤醒一个G，同时减去处于等待队列的G的个数，并把唤醒标志写入
-			if atomic.CompareAndSwapInt32(&m.state, old, new) {//把锁的状态写入一个 唤醒标志
+			if atomic.CompareAndSwapInt32(&m.state, old, new) {
 				runtime_Semrelease(&m.sema, false, 1)//释放信号量
 				return
 			}
