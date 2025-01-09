@@ -30,20 +30,21 @@ func (e errNetClosing) Temporary() bool { return false }
 // it has been closed.
 var ErrNetClosing = errNetClosing{}
 
-// ErrFileClosing is returned when a file descriptor is used after it
-// has been closed.
+// ErrFileClosing 当一个文件描述符在它被关闭后再次使用，则返回该错误
 var ErrFileClosing = errors.New("use of closed file")
 
 // ErrNoDeadline is returned when a request is made to set a deadline
 // on a file type that does not use the poller.
+// ErrNoDeadline 当给一个不使用poller的文件类型设置超时时间时，返回该错误
 var ErrNoDeadline = errors.New("file type does not support deadline")
 
 // Return the appropriate closing error based on isFile.
+// 根据isFile参数的值，返回对应的错误码
 func errClosing(isFile bool) error {
 	if isFile {
 		return ErrFileClosing
-	}
-	return ErrNetClosing
+	} //文件关闭错误
+	return ErrNetClosing //网络关闭错误
 }
 
 // ErrDeadlineExceeded is returned for an expired deadline.
