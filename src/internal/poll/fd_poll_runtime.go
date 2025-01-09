@@ -18,14 +18,14 @@ import (
 //go:linkname runtimeNano runtime.nanotime
 func runtimeNano() int64
 
-func runtime_pollServerInit()                            //初始化/创建 epoll实例
-func runtime_pollOpen(fd uintptr) (uintptr, int)         //epoll_add(ADD)
-func runtime_pollClose(ctx uintptr)                      // 把pd指向的底层fd从epoll的监听队列移除
-func runtime_pollWait(ctx uintptr, mode int) int         //epoll_wait，对应底层的 runtime.poll_runtime_pollWait 函数
-func runtime_pollWaitCanceled(ctx uintptr, mode int) int //指向 runtime.poll_runtime_pollWaitCanceled
-func runtime_pollReset(ctx uintptr, mode int) int        //重置runtime.pollDesc，以便后续复用
+func runtime_pollServerInit()                            //相当于epoll_create()，初始化/创建epoll实例
+func runtime_pollOpen(fd uintptr) (uintptr, int)         //相当于epoll_add(ADD)
+func runtime_pollClose(ctx uintptr)                      //相当于epoll_add(DEL)，把pd指向的底层fd从epoll的监听队列移除
+func runtime_pollWait(ctx uintptr, mode int) int         //相当于epoll_wait，对应底层的 runtime.poll_runtime_pollWait 函数
+func runtime_pollWaitCanceled(ctx uintptr, mode int) int //本函数只用于windows系统。指向 runtime.poll_runtime_pollWaitCanceled，调用本函数，返回bool或阻塞等待IO
+func runtime_pollReset(ctx uintptr, mode int) int        //重置runtime.pollDesc，以便后续复用。指向 runtime.poll_runtime_pollReset
 func runtime_pollSetDeadline(ctx uintptr, d int64, mode int)
-func runtime_pollUnblock(ctx uintptr) //指向 runtime.poll_runtime_pollUnblock
+func runtime_pollUnblock(ctx uintptr) //解除在该fd上等待事件的所有G的阻塞，指向 runtime.poll_runtime_pollUnblock
 func runtime_isPollServerDescriptor(fd uintptr) bool
 
 //是底层系统fd的封装，负责fd和epoll的交互
@@ -35,7 +35,7 @@ type pollDesc struct {
 
 var serverInit sync.Once
 
-//创建并初始化epoll实例，同时添加对fd.Sysfd的监听
+//创建并初始化epoll实例，同时操作epoll添加对fd.Sysfd的监听
 func (pd *pollDesc) init(fd *FD) error {
 	serverInit.Do(runtime_pollServerInit)             //调用对应系统平台的epoll_create，创建并初始化epoll实例
 	ctx, errno := runtime_pollOpen(uintptr(fd.Sysfd)) //把fd.Sysfd指向的系统fd添加到epoll的监听队列里，底层是把fd对应的系统fd添加到epoll的监听队列里，返回的ctx是代表fd的对象（该fd已被监听，使用了 runtime.pollDesc实例 来代表被监听的fd（封装））
@@ -56,7 +56,7 @@ func (pd *pollDesc) close() {
 }
 
 // Evict evicts fd from the pending list, unblocking any I/O running on fd.
-// 把底层的fd从epoll的阻塞队列里移除，同时解除在此fd上的所有阻塞
+// 解除等待在此fd上所有G的阻塞
 func (pd *pollDesc) evict() {
 	if pd.runtimeCtx == 0 {
 		return
@@ -64,7 +64,8 @@ func (pd *pollDesc) evict() {
 	runtime_pollUnblock(pd.runtimeCtx)
 }
 
-//重置pd里面的runtimeCtx为mode
+//重置pd里面的runtimeCtx，以便后续使用
+//一般调用本方法后，接着会调用waitRead或waitWrite方法
 func (pd *pollDesc) prepare(mode int, isFile bool) error {
 	if pd.runtimeCtx == 0 {
 		return nil
@@ -85,10 +86,11 @@ func (pd *pollDesc) wait(mode int, isFile bool) error {
 	if pd.runtimeCtx == 0 {
 		return errors.New("waiting for unsupported file type")
 	}
-	res := runtime_pollWait(pd.runtimeCtx, mode) // 阻塞在此
-	return convertErr(res, isFile)
+	res := runtime_pollWait(pd.runtimeCtx, mode) //阻塞在此，直到底层fd上的读写事件就绪
+	return convertErr(res, isFile)               //判断是否有异常
 }
 
+//所有调用本方法的调用方都可能会被阻塞，直到底层fd的读写事件就绪
 func (pd *pollDesc) waitRead(isFile bool) error {
 	return pd.wait('r', isFile)
 }
@@ -97,6 +99,7 @@ func (pd *pollDesc) waitWrite(isFile bool) error {
 	return pd.wait('w', isFile)
 }
 
+//本方法只用于windows系统
 func (pd *pollDesc) waitCanceled(mode int) {
 	if pd.runtimeCtx == 0 {
 		return
@@ -104,7 +107,7 @@ func (pd *pollDesc) waitCanceled(mode int) {
 	runtime_pollWaitCanceled(pd.runtimeCtx, mode)
 }
 
-// 返回当前pd是否pollable的
+// 判断当前pd是否pollable的
 func (pd *pollDesc) pollable() bool {
 	return pd.runtimeCtx != 0
 }

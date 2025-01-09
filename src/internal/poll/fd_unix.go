@@ -15,11 +15,11 @@ import (
 
 // FD is a file descriptor. The net and os packages use this type as a
 // field of a larger type representing a network connection or OS file.
-// FD 文件描述符。net和os包使用本结构体代表网络连接或系统文件
+// FD 是底层fd的封装。net和os包使用本结构体来表示网络连接或系统文件（的抽象）
 type FD struct {
 	// Lock sysfd and serialize access to Read and Write methods.
 	// sysfd锁，用于序列化访问 Read 和 Write 方法
-	fdmu fdMutex //该字段用于保护底层fd的并发安全（因为本FD结构体可能会被多个协程并发使用）
+	fdmu fdMutex //该字段用于保护底层fd的并发安全（因为本FD结构体可能会被多个协程并发使用），并用于记录有多少个调用方使用本FD实例
 
 	// 系统fd，不可篡改，只会在 Close 关闭时变为-1
 	Sysfd int
@@ -52,11 +52,9 @@ type FD struct {
 	isFile bool
 }
 
-// Init initializes the FD. The Sysfd field should already be set.
-// This can be called multiple times on a single FD.
-// The net argument is a network name from the net package (e.g., "tcp"),
-// or "file".
-// Set pollable to true if fd should be managed by runtime netpoll.
+// 初始化FD实例，在调用本方法前，FD.Sysfd 字段应该已存有值。本方法可以同一个FD实例上调用多次
+// net参数的值可以是net包里的network name（如tcp）或 file
+// 如果底层fd是由runtime的netpoll管理（底层epoll监听），则pollable参数传入true
 func (fd *FD) Init(net string, pollable bool) error {
 	// We don't actually care about the various network types.
 	if net == "file" {
@@ -76,7 +74,8 @@ func (fd *FD) Init(net string, pollable bool) error {
 	return err
 }
 
-// destroy 关闭底层fd，当本FD实例不再有引用时（无调用方使用了）才调用
+// 本方法的行为，从epoll里移除监听并关闭底层fd，当本FD实例不再有引用时（无调用方使用了）才能调用本方法
+// 当本FD实例的引用次数为0时，都会调用本方法进行关闭（这么做是为了节约资源考虑，不再使用了则能关闭就关闭）
 func (fd *FD) destroy() error {
 	// Poller may want to unregister fd in readiness notification mechanism,
 	// so this must be executed before CloseFunc.
@@ -91,14 +90,13 @@ func (fd *FD) destroy() error {
 	// 调用系统方法关闭底层的系统fd（注意在关闭系统fd前，需要在epoll上把该fd的监听注销掉）
 	err := CloseFunc(fd.Sysfd)
 
-	fd.Sysfd = -1
+	fd.Sysfd = -1                 //在destroy时，把sysfd重置为-1
 	runtime_Semrelease(&fd.csema) //系统fd被关闭，发出信号
 	return err
 }
 
-// Close closes the FD. The underlying file descriptor is closed by the
-// destroy method when there are no remaining references.
 // 关闭该FD实例，当底层fd无引用时，则会被destroy方法关闭
+// 当本方法被调用时，则先唤醒所有阻塞在本FD上的等待读写事件的G，然后再把底层fd从epoll监听里移除，然后再关闭底层fd
 func (fd *FD) Close() error {
 	if !fd.fdmu.increfAndClose() {
 		return errClosing(fd.isFile)
@@ -110,15 +108,15 @@ func (fd *FD) Close() error {
 	// fairly quickly, since all the I/O is non-blocking, and any
 	// attempts to block in the pollDesc will return errClosing(fd.isFile).
 	// 接触任何IO阻塞，
-	fd.pd.evict() //关闭底层socket（底层会唤醒所有阻塞在该fd上的g）
+	fd.pd.evict() //唤醒所有阻塞在该fd上的G，这里只是解除阻塞，而不会把fd从epoll里移除监听
 
 	// The call to decref will call destroy if there are no other
 	// references.
-	err := fd.decref() //如果该FD实例已无其他协程调用，则会关闭底层的fd
+	err := fd.decref() //如果该FD实例已无其他协程调用，则会关闭底层的fd（关闭fd并从epoll上异常监听）
 
 	// Wait until the descriptor is closed. If this was the only
 	// reference, it is already closed. Only wait if the file has
-	// not been set to blocking mode, as otherwise any current I/O
+	// not been set to blocking mode, as otherwise any current I/O2
 	// may be blocking, and that would block the Close.
 	// No need for an atomic read of isBlocking, increfAndClose means
 	// we have exclusive access to fd.
@@ -222,7 +220,7 @@ func (fd *FD) Pread(p []byte, off int64) (int, error) {
 // ReadFrom wraps the recvfrom network call.
 // ReadFrom 对 底层系统recvfrom函数 的封装
 func (fd *FD) ReadFrom(p []byte) (int, syscall.Sockaddr, error) {
-	if err := fd.readLock(); err != nil {
+	if err := fd.readLock(); err != nil { //阻塞获取读锁
 		return 0, nil, err
 	}
 	defer fd.readUnlock()
@@ -230,13 +228,13 @@ func (fd *FD) ReadFrom(p []byte) (int, syscall.Sockaddr, error) {
 		return 0, nil, err
 	}
 	for {
-		n, sa, err := syscall.Recvfrom(fd.Sysfd, p, 0)
+		n, sa, err := syscall.Recvfrom(fd.Sysfd, p, 0) //先初尝读取数据
 		if err != nil {
 			if err == syscall.EINTR {
 				continue
 			}
 			n = 0
-			if err == syscall.EAGAIN && fd.pd.pollable() {
+			if err == syscall.EAGAIN && fd.pd.pollable() { //暂无数据可读，则进行poll等待
 				if err = fd.pd.waitRead(fd.isFile); err == nil {
 					continue
 				}

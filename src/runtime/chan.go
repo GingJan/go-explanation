@@ -34,13 +34,13 @@ type hchan struct {
 	qcount   uint           // 环形队列里元素的个数
 	dataqsiz uint           // size of the circular queue 环形队列的大小（缓冲队列是通过环形队列实现的），在make时指定的数值就是dataqsiz的值，也即环形队列的大小（有多少个slot）
 	buf      unsafe.Pointer // points to an array of dataqsiz elements 指针，指向缓冲队列
-	elemsize uint16 //缓冲队列里元素的大小
-	closed   uint32 //channel的关闭状态，0未关闭，1已关闭
-	elemtype *_type // element type 元素类型
-	sendx    uint   // send index 发送的index（环形队列里的send下标），当插入一个元素时，sendx向后移动一个位置
-	recvx    uint   // receive index 接收的index（环形队列里的recv下标），当取出一个元素时，recvx向后移动一个位置
-	recvq    waitq  // list of recv waiters 阻塞在chan的接收者队列（由sudog同步对象组成的链表）
-	sendq    waitq  // list of send waiters 阻塞在chan的发送者队列
+	elemsize uint16         //缓冲队列里元素的大小
+	closed   uint32         //channel的关闭状态，0未关闭，1已关闭
+	elemtype *_type         // element type 元素类型
+	sendx    uint           // send index 发送的index（环形队列里的send下标），当插入一个元素时，sendx向后移动一个位置
+	recvx    uint           // receive index 接收的index（环形队列里的recv下标），当取出一个元素时，recvx向后移动一个位置
+	recvq    waitq          // list of recv waiters 阻塞在chan的接收者队列（由sudog同步对象组成的链表）
+	sendq    waitq          // list of send waiters 阻塞在chan的发送者队列
 
 	// lock protects all fields in hchan, as well as several
 	// fields in sudogs blocked on this channel.
@@ -69,6 +69,7 @@ func makechan64(t *chantype, size int64) *hchan {
 
 	return makechan(t, int(size))
 }
+
 //make(chan T, 1)
 func makechan(t *chantype, size int) *hchan {
 	elem := t.elem
@@ -121,7 +122,7 @@ func makechan(t *chantype, size int) *hchan {
 
 // chanbuf(c, i) 返回一个指向环形队列里第i个槽位的指针
 func chanbuf(c *hchan, i uint) unsafe.Pointer {
-	return add(c.buf, uintptr(i)*uintptr(c.elemsize))// c.buf + i*elesize
+	return add(c.buf, uintptr(i)*uintptr(c.elemsize)) // c.buf + i*elesize
 }
 
 // full reports whether a send on c would block (that is, the channel is full).
@@ -521,10 +522,10 @@ func chanrecv(c *hchan, ep unsafe.Pointer, block bool) (selected, received bool)
 		return true, false
 	}
 
-	if sg := c.sendq.dequeue(); sg != nil {//如果sg为nil，说明没有sender阻塞在channel，也即channel还未满或不是缓冲channel
+	if sg := c.sendq.dequeue(); sg != nil { //如果sg为nil，说明没有sender阻塞在channel，也即channel还未满或不是缓冲channel
 		// 找到一个正在等待channel可写的sender协程，如果buffer缓冲是0，则直接从sender里获取值
 		// 否则，从队头取出值并且把sender的值追加到队尾，这个取出的值和追加的值都是在环形队列里的同一个槽，因为队列已经满了
-		recv(c, sg, ep, func() { unlock(&c.lock) }, 3)//recv只负责处理同步channel和满channel的场景
+		recv(c, sg, ep, func() { unlock(&c.lock) }, 3) //recv只负责处理同步channel和满channel的场景
 		return true, true
 	}
 
@@ -536,11 +537,11 @@ func chanrecv(c *hchan, ep unsafe.Pointer, block bool) (selected, received bool)
 			racenotify(c, c.recvx, nil)
 		}
 		if ep != nil {
-			typedmemmove(c.elemtype, ep, qp)//把c.elemtype类型的值从qp复制到ep
+			typedmemmove(c.elemtype, ep, qp) //把c.elemtype类型的值从qp复制到ep
 		}
-		typedmemclr(c.elemtype, qp)//把qp的值清空
+		typedmemclr(c.elemtype, qp) //把qp的值清空
 		c.recvx++
-		if c.recvx == c.dataqsiz {//当recv等于队列大小，则说明已经到队尾了，重置回队头
+		if c.recvx == c.dataqsiz { //当recv等于队列大小，则说明已经到队尾了，重置回队头
 			c.recvx = 0
 		}
 		c.qcount--
@@ -548,7 +549,7 @@ func chanrecv(c *hchan, ep unsafe.Pointer, block bool) (selected, received bool)
 		return true, true
 	}
 
-	if !block {//非阻塞的，则立即解锁返回
+	if !block { //非阻塞的，则立即解锁返回
 		unlock(&c.lock)
 		return false, false
 	}
@@ -556,7 +557,7 @@ func chanrecv(c *hchan, ep unsafe.Pointer, block bool) (selected, received bool)
 	// no sender available: block on this channel.
 	// 队列里没元素，也没sender协程，则读协程 阻塞在channel上
 	gp := getg()
-	mysg := acquireSudog()//申请一个sudog对象，该对象用于表示g在某个事件上阻塞了
+	mysg := acquireSudog() //申请一个sudog对象，该对象用于表示g在某个事件上阻塞了
 	mysg.releasetime = 0
 	if t0 != 0 {
 		mysg.releasetime = -1
@@ -616,17 +617,17 @@ recv 负责在一个满channel上执行接收操作，分为两部分：
 channel c必须是满的同时获取了锁，recv函数使用unlockf闭包函数解c的持有的锁
 sg必须已从c的sendq里出队
 ep必须非空且指向 堆 或 调用者的栈 空间
- */
+*/
 func recv(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int) {
-	if c.dataqsiz == 0 {//无缓冲channel，同步channel
+	if c.dataqsiz == 0 { //无缓冲channel，同步channel
 		if raceenabled {
 			racesync(c, sg)
 		}
 		if ep != nil {
 			// copy data from sender 直接从sender取出值
-			recvDirect(c.elemtype, sg, ep)//把sg的值复制到ep
+			recvDirect(c.elemtype, sg, ep) //把sg的值复制到ep
 		}
-	} else {//异步channel且channel已满
+	} else { //异步channel且channel已满
 		// 队列已满，从队列头取出元素，把sender的值入队尾，因为队列是满的，所以取出的元素和入队的元素都是在同一个槽
 		qp := chanbuf(c, c.recvx)
 		if raceenabled {
@@ -647,16 +648,16 @@ func recv(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int) {
 	}
 	sg.elem = nil
 	gp := sg.g
-	unlockf()//执行解锁闭包函数
+	unlockf() //执行解锁闭包函数
 	gp.param = unsafe.Pointer(sg)
 	sg.success = true
 	if sg.releasetime != 0 {
-		sg.releasetime = cputicks()//当前cpu周期
+		sg.releasetime = cputicks() //当前cpu周期
 	}
-	goready(gp, skip+1)//把阻塞在channel上sg对应的g唤醒
+	goready(gp, skip+1) //把阻塞在channel上sg对应的g唤醒
 }
 
-//本函数会在g0上执行
+//本函数会在g0上执行，如果本函数返回false，则会恢复本用户协程gp的执行，返回true则暂停本用户协程gp的执行（进而调度其他用户协程）
 func chanparkcommit(gp *g, chanLock unsafe.Pointer) bool {
 	// There are unlocked sudogs that point into gp's stack. Stack
 	// copying must lock the channels of those sudogs.

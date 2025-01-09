@@ -40,6 +40,8 @@ func getg() *g
 // This must NOT be go:noescape: if fn is a stack-allocated closure,
 // fn puts g on a run queue, and g executes before fn returns, the
 // closure will be invalidated while it is still executing.
+// mcall 把用户协程g的栈切换到g0栈，同时调用fn(g)，传入的是调用本函数的用户协程g
+// mcall函数会把当前用户协程g的PC/SP等寄存器信息存放到g->sched里，以便后续能恢复。
 // mcall函数的作用是在系统栈中执行调度代码，并且调度代码不会返回，将在运行过程中又一次执行mcall。
 // mcall的流程是保存当前的g的上下文，切换到g0的上下文，传入函数参数，跳转到fn函数代码执行
 //常见的调用mcall执行的函数有：
@@ -69,7 +71,7 @@ func mcall(fn func(*g))
 //	})
 //	... use x ...
 //
-// 在系统线程的栈里运行fn函数，调用该函数时，会从用户协程切换到g0系统协程
+// 在系统线程的栈（g0）里运行fn函数，调用该函数时，会从用户协程切换到g0系统协程
 // 如果本函数的调用者是在OS系统线程（即g0）栈里的 或 在信号处理（即gsignal）栈里的，
 // 则直接调用fn函数并返回
 // 否则，本函数的调用者就是来自受限的常规goroutine栈里的，这种情况下，systemstack会先切换到OS线程栈里再调用fn函数
@@ -259,7 +261,7 @@ func breakpoint()
 //go:noescape
 func reflectcall(stackArgsType *_type, fn, stackArgs unsafe.Pointer, stackArgsSize, stackRetOffset, frameSize uint32, regArgs *abi.RegArgs)
 
-func procyield(cycles uint32)//执行cycles次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
+func procyield(cycles uint32) //执行cycles次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
 
 type neverCallThisFunction struct{}
 

@@ -69,7 +69,7 @@ func (mu *fdMutex) incref() bool {
 	}
 }
 
-// increfAndClose 关闭mu，如果已关闭则返回false
+// 增加引用次数，并标记为关闭
 func (mu *fdMutex) increfAndClose() bool {
 	for {
 		old := atomic.LoadUint64(&mu.state) //加载原值
@@ -101,7 +101,7 @@ func (mu *fdMutex) increfAndClose() bool {
 
 // decref removes a reference from mu.
 // It reports whether there is no remaining reference.
-// 从mu里去掉一次引用，当最后一次引用都被去掉时，说明该FD已无调用方使用了，可以进行关闭了
+// 从mu里去掉一次引用，当最后一次引用都被去掉时，说明该FD已无调用方使用了，可以进行关闭了（此时本方法返回true）
 func (mu *fdMutex) decref() bool {
 	for {
 		old := atomic.LoadUint64(&mu.state)
@@ -117,7 +117,7 @@ func (mu *fdMutex) decref() bool {
 
 // lock adds a reference to mu and locks mu.
 // It reports whether mu is available for reading or writing.
-// 引用次数自增并且锁上mu，返回是否可以进行读或写了
+// 增加引用次数并且获取读/写锁，返回true表示可以进行读/写了，当锁被占用时，则阻塞等待锁释放
 func (mu *fdMutex) rwlock(read bool) bool {
 	var mutexBit, mutexWait, mutexMask uint64
 	var mutexSema *uint32
@@ -213,19 +213,17 @@ func (fd *FD) incref() error {
 	return nil
 }
 
-// decref removes a reference from fd.
-// It also closes fd when the state of fd is set to closed and there
-// is no remaining reference.
-//
+// 本方法用于记录对FD实例的引用次数。当引用次数为0时，则说明无调用方使用本FD实例了，则可以进行关闭了
 func (fd *FD) decref() error {
-	if fd.fdmu.decref() { //如果为true，说明该fd已无引用，可以关闭了
-		return fd.destroy() //关闭底层fd
+	if fd.fdmu.decref() { //如果返回true，说明该FD实例已无引用，可以关闭了
+		return fd.destroy() //异常epoll监听并关闭底层fd
 	} //当最后一个引用都被关闭时（也即无调用方使用本FD实例了），则调用destroy方法关闭底层fd
 	return nil
 }
 
 // readLock adds a reference to fd and locks fd for reading.
 // It returns an error when fd cannot be used for reading.
+// 增加引用次数并获取读锁，当锁已被占用则阻塞等待
 func (fd *FD) readLock() error {
 	if !fd.fdmu.rwlock(true) { //获取读锁
 		return errClosing(fd.isFile)
@@ -237,7 +235,7 @@ func (fd *FD) readLock() error {
 // It also closes fd when the state of fd is set to closed and there
 // is no remaining reference.
 func (fd *FD) readUnlock() {
-	if fd.fdmu.rwunlock(true) {
+	if fd.fdmu.rwunlock(true) { //解读锁
 		fd.destroy()
 	}
 }

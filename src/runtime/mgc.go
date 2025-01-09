@@ -1162,6 +1162,7 @@ type gcBgMarkWorkerNode struct {
 	node lfnode
 
 	// The g of this worker.
+	// 本worker的g
 	gp guintptr
 
 	// Release this m on park. This is used to communicate with the unlock
@@ -1171,7 +1172,7 @@ type gcBgMarkWorkerNode struct {
 }
 
 func gcBgMarkWorker() {
-	gp := getg()
+	gp := getg() //是用户协程gp
 
 	// We pass node to a gopark unlock function, so it can't be on
 	// the stack (see gopark). Prevent deadlock from recursively

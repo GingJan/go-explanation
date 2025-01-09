@@ -10,7 +10,6 @@ import (
 	"internal/goarch"
 	"runtime/internal/atomic"
 	"runtime/internal/sys"
-	"std/internal/goos"
 	"unsafe"
 )
 
@@ -336,14 +335,10 @@ func goschedguarded() {
 	mcall(goschedguarded_m)
 }
 
-// Puts the current goroutine into a waiting state and calls unlockf on the
-// system stack.
-//
-// If unlockf returns false, the goroutine is resumed.
-//
-// unlockf must not access this G's stack, as it may be moved between
-// the call to gopark and the call to unlockf.
-//
+// 把当前用户协程设为等待态，并在系统栈g0处调用unlockf函数，如果unlockf函数返回false，则该用户协程恢复运行
+// unlockf 不能访问当前用户协程G的栈，因为在调用 gopark后 到在调用 unlockf 之前这段时间内，G 的栈可能已经被移动。
+// 注意，因为在把G设为等待态后才调用unlockf函数，所以在调用unlockf时，G可能已经就绪可以恢复执行了，除非有外部同步操作阻止G变为就绪态
+// 如果unlockf返回false，则G依旧处于等待态。所以如果希望把本用户协程挂起，则传入的unlockf函数必须返回false
 // Note that because unlockf is called after putting the G into a waiting
 // state, the G may have already been readied by the time unlockf is called
 // unless there is external synchronization preventing the G from being
@@ -371,8 +366,8 @@ func gopark(unlockf func(*g, unsafe.Pointer) bool, lock unsafe.Pointer, reason w
 	mp.waittraceev = traceEv
 	mp.waittraceskip = traceskip
 	releasem(mp) //释放 m
-	// can't do anything that might move the G between Ms here.
-	mcall(park_m)//切换到g0栈（系统线程栈？）上执行park_m
+	// 这里不可以做把G从本M移动到另一个M的操作 can't do anything that might move the G between Ms here.
+	mcall(park_m) //切换到g0栈（系统线程栈）上执行park_m
 }
 
 // Puts the current goroutine into a waiting state and unlocks the lock.
@@ -382,7 +377,7 @@ func goparkunlock(lock *mutex, reason waitReason, traceEv byte, traceskip int) {
 	gopark(parkunlock_c, unsafe.Pointer(lock), reason, traceEv, traceskip)
 }
 
-//更新goroutine状态，把用户协程gp置ready态
+//更新G状态，把用户协程gp置为ready态
 func goready(gp *g, traceskip int) {
 	systemstack(func() { //切换到g0执行
 		ready(gp, traceskip, true)
@@ -884,6 +879,10 @@ func fastrandinit() {
 
 // Mark gp ready to run.
 // 本函数必定在g0里执行
+// 本函数实现以下行为
+// 1.把gp从等待态改为可执行态
+// 2.把gp放入当前M所在P的本地队列里（该队列里的g都是runnable态）
+// 3.尝试调度空闲的P来执行gp
 func ready(gp *g, traceskip int, next bool) {
 	if trace.enabled {
 		traceGoUnpark(gp, traceskip)
@@ -2340,8 +2339,8 @@ func mspinning() {
 // comment on acquirem below.
 //
 // Must not have write barriers because this may be called without a P.
-// 调度一些M来运行p（如果有必要，则创建新的m）
-// 如果传入的p是nil，则尝试获取空闲的p，若无空闲的p则啥都不干就return
+// 调度一些M来运行P（如果有必要，则创建新的m）
+// 如果传入的p是nil，则尝试获取空闲的P，若无空闲的P则啥都不干就return
 // 如果传入spinning=true，则调用者自增了nmspinning，
 //go:nowritebarrierrec
 func startm(_p_ *p, spinning bool) {
@@ -2367,7 +2366,7 @@ func startm(_p_ *p, spinning bool) {
 		_p_ = pidleget() //尝试获取空闲的p
 		if _p_ == nil {  //无空闲的p，则释放
 			unlock(&sched.lock)
-			if spinning {//自旋等待
+			if spinning { //自旋等待
 				// The caller incremented nmspinning, but there are no idle Ps,
 				// so it's okay to just undo the increment and give up.
 				if int32(atomic.Xadd(&sched.nmspinning, -1)) < 0 {
@@ -2494,17 +2493,19 @@ func handoffp(_p_ *p) {
 
 // Tries to add one more P to execute G's.
 // Called when a G is made runnable (newproc, ready).
-// 尝试添加多一个P来执行G
+// 尝试调用空闲P来执行G
 // 当G被设为runnable时（即调用newproc，ready时），调用本函数
 func wakep() {
+	//没有空闲的P了，只能返回
 	if atomic.Load(&sched.npidle) == 0 {
 		return
 	}
 	// be conservative about spinning threads
+	// 谨慎地使用处于自旋的线程
 	if atomic.Load(&sched.nmspinning) != 0 || !atomic.Cas(&sched.nmspinning, 0, 1) {
 		return
 	}
-	startm(nil, true) //调度m来执行，传入的p=nil，则尝试获取空闲的p
+	startm(nil, true) //调度M来执行，传入的p是nil，则尝试获取空闲的P
 }
 
 // Stops execution of the current m that is locked to a g until the g is runnable again.
@@ -2584,7 +2585,7 @@ func gcstopm() {
 		notewakeup(&sched.stopnote)
 	}
 	unlock(&sched.lock)
-	stopm()//停止当前g的m的运行，直到有新的任务
+	stopm() //停止当前g的m的运行，直到有新的任务
 }
 
 // Schedules gp to run on the current M.
@@ -2937,14 +2938,14 @@ func pollWork() bool {
 	if sched.runqsize != 0 { //全局runnable的队列不为空
 		return true
 	}
-	p := getg().m.p.ptr()//本g所在的p
+	p := getg().m.p.ptr() //本g所在的p
 	if !runqempty(p) {
 		//当前p的本地队列不为空，则不需要去查询网络IO了（因为本地队列的g还未处理完）
 		return true
 	}
 	if netpollinited() && atomic.Load(&netpollWaiters) > 0 && sched.lastpoll != 0 {
-		if list := netpoll(0); !list.empty() {//轮询是否有网络IO就绪
-			injectglist(&list)//有就绪，则把等待在其上面的G放入到全局或P的队列里等待执行
+		if list := netpoll(0); !list.empty() { //轮询是否有网络IO就绪
+			injectglist(&list) //有就绪，则把等待在其上面的G放入到全局或P的队列里等待执行
 			return true
 		}
 	}
@@ -3208,14 +3209,14 @@ func injectglist(glist *gList) {
 		}
 	}
 
-	pp := getg().m.p.ptr()//获取当前g的m所绑定的p
-	if pp == nil {//因为m0不需要绑定p，所以当pp=nil则说明当前m是m0
+	pp := getg().m.p.ptr() //获取当前g的m所绑定的p
+	if pp == nil {         //因为m0不需要绑定p，所以当pp=nil则说明当前m是m0
 		lock(&sched.lock)
 		globrunqputbatch(&q, int32(qsize)) //把q里的qsize个g放到全局g队列
 		unlock(&sched.lock)
 
 		//并调度m去绑定空闲的p来执行全局队列里的g
-		startIdle(qsize)//尝试启动qsize个m处理，当没有空闲p时，依旧无法处理则先退出
+		startIdle(qsize) //尝试启动qsize个m处理，当没有空闲p时，依旧无法处理则先退出
 		return
 	}
 
@@ -3270,7 +3271,7 @@ top:
 	pp.preempt = false
 
 	if sched.gcwaiting != 0 { //当需要执行gc了
-		gcstopm()//暂停m（为gc让步）
+		gcstopm() //暂停m（为gc让步）
 		goto top
 	}
 	if pp.runSafePointFn != 0 {
@@ -3280,7 +3281,7 @@ top:
 	// Sanity check: if we are spinning, the run queue should be empty.
 	// Check this before calling checkTimers, as that might call
 	// goready to put a ready goroutine on the local run queue.
-	if _g_.m.spinning && (pp.runnext != 0 || pp.runqhead != pp.runqtail) {//当前m在自旋，并且p还有g要执行
+	if _g_.m.spinning && (pp.runnext != 0 || pp.runqhead != pp.runqtail) { //当前m在自旋，并且p还有g要执行
 		throw("schedule: spinning with local work")
 	}
 
@@ -3387,8 +3388,8 @@ top:
 // 调用方可进行其他工作，但最终需调用schedule函数来重启本M的goroutines协程的调度
 func dropg() {
 	_g_ := getg() //返回的是g0
-	//以下两步是把当前用户协程g和当前M解绑/分离
-	setMNoWB(&_g_.m.curg.m, nil)
+	//以下两步是把当前M的用户协程G（非g0）和当前M解绑/分离
+	setMNoWB(&_g_.m.curg.m, nil) // &_g_.m.curg 指向的是用户协程G
 	setGNoWB(&_g_.m.curg, nil)
 }
 
@@ -3463,7 +3464,7 @@ func parkunlock_c(gp *g, lock unsafe.Pointer) bool {
 }
 
 // park continuation on g0.
-// 本函数在g0上执行，gp是需要被park的用户协程
+// 本函数在g0上执行，gp是需要被挂起的用户协程
 func park_m(gp *g) {
 	_g_ := getg() //返回当前M的g0
 
@@ -3471,13 +3472,13 @@ func park_m(gp *g) {
 		traceGoPark(_g_.m.waittraceev, _g_.m.waittraceskip)
 	}
 
-	casgstatus(gp, _Grunning, _Gwaiting) //把当前的用户协程g从 running态 改为 waiting态（这是因为该gp可能运行的时间比较长了）
-	dropg()                              //把当前M和gp解绑，因为gp不再是running态了
+	casgstatus(gp, _Grunning, _Gwaiting) //把当前的用户协程gp从running态改为waiting态（这是因为该gp可能运行的时间比较长了）
+	dropg()                              //把当前M和M所绑定的用户协程gp解绑，因为gp不再是running态了
 
-	//为当前M找一个新的runnable的g
+	//为当前M找一个新的runnable的用户协程G
 
 	//先看看当前M有无阻塞的等待
-	if fn := _g_.m.waitunlockf; fn != nil { //表示当前线程上有阻塞在等待事件
+	if fn := _g_.m.waitunlockf; fn != nil { //表示当前线程M上有阻塞等待事件
 		ok := fn(gp, _g_.m.waitlock)
 		_g_.m.waitunlockf = nil
 		_g_.m.waitlock = nil
@@ -3499,12 +3500,12 @@ func goschedImpl(gp *g) {
 		throw("bad g status")
 	}
 	casgstatus(gp, _Grunning, _Grunnable)
-	dropg()//把当前用户协程g和当前M解绑/分离，
+	dropg() //把当前用户协程g和当前M解绑/分离，
 	lock(&sched.lock)
 	globrunqput(gp)
 	unlock(&sched.lock)
 
-	schedule()//调度其他g
+	schedule() //调度其他g
 }
 
 // Gosched continuation on g0.
@@ -5691,7 +5692,7 @@ func mget() *m {
 // 把gp放入到全局队列，可以在STW期间执行本函数，所以是不允许写屏障的
 //go:nowritebarrierrec
 func globrunqput(gp *g) {
-	assertLockHeld(&sched.lock)//判断是否持有sched.lock
+	assertLockHeld(&sched.lock) //判断是否持有sched.lock
 
 	sched.runq.pushBack(gp)
 	sched.runqsize++

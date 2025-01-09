@@ -93,8 +93,8 @@ type pollDesc struct {
 
 	// rg, wg are accessed atomically and hold g pointers.
 	// (Using atomic.Uintptr here is similar to using guintptr elsewhere.)
-	rg atomic.Uintptr // pdReady, pdWait, G waiting for read or nil，取值可能是 pdReady 或 pdWait 或 等待可读的G（的指针） 或 nil
-	wg atomic.Uintptr // pdReady, pdWait, G waiting for write or nil，相关的写操作的等待状态，有多个值：nil、pdReady、pdWait或等待写的G（的指针）
+	rg atomic.Uintptr // pdReady, pdWait, G waiting for read or nil，取值可能是 pdReady 或 pdWait 或 等待可读的G（的指针） 或 nil/0
+	wg atomic.Uintptr // pdReady, pdWait, G waiting for write or nil，相关的写操作的等待状态，有多个值：nil/0、pdReady、pdWait或等待写的G（的指针）
 
 	lock    mutex     // 保护下面字段的安全变动
 	closing bool      // 当前pollDesc实例是否关闭
@@ -180,7 +180,7 @@ var (
 	netpollInited   uint32 //netpoll是否初始化
 
 	pollcache      pollCache //poll复用池
-	netpollWaiters uint32    //等待netpoll的协程数量
+	netpollWaiters uint32    //阻塞等待netpoll上读写事件的协程的数量
 )
 
 //go:linkname poll_runtime_pollServerInit internal/poll.runtime_pollServerInit
@@ -239,7 +239,7 @@ func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
 	pd.rg.Store(0)
 	pd.rd = 0
 	pd.wseq++
-	pd.wg.Store(0)//复用对象的初始化
+	pd.wg.Store(0) //复用对象的初始化
 	pd.wd = 0
 	pd.self = pd
 	pd.publishInfo()
@@ -303,7 +303,7 @@ func poll_runtime_pollReset(pd *pollDesc, mode int) int {
 //go:linkname poll_runtime_pollWait internal/poll.runtime_pollWait
 func poll_runtime_pollWait(pd *pollDesc, mode int) int {
 	errcode := netpollcheckerr(pd, int32(mode)) //检查底层的fd是否有异常
-	if errcode != pollNoError {
+	if errcode != pollNoError {                 //底层fd有异常则立即返回错误
 		return errcode
 	}
 
@@ -312,7 +312,7 @@ func poll_runtime_pollWait(pd *pollDesc, mode int) int {
 		netpollarm(pd, mode)
 	}
 
-	for !netpollblock(pd, int32(mode), false) { // 阻塞在此，直到有事件触发才继续
+	for !netpollblock(pd, int32(mode), false) { // 阻塞在此，直到有事件触发（就绪）才返回到本函数poll_runtime_pollWait的调用方
 		errcode = netpollcheckerr(pd, int32(mode))
 		if errcode != pollNoError {
 			return errcode
@@ -324,12 +324,12 @@ func poll_runtime_pollWait(pd *pollDesc, mode int) int {
 	return pollNoError
 }
 
+//本函数只用于windows系统，在尝试取消一个异步IO操作的等待失败后才调用本函数，等待ioready，忽略fd关闭和等待超时的情况
 //go:linkname poll_runtime_pollWaitCanceled internal/poll.runtime_pollWaitCanceled
 func poll_runtime_pollWaitCanceled(pd *pollDesc, mode int) {
 	// This function is used only on windows after a failed attempt to cancel
 	// a pending async IO operation. Wait for ioready, ignore closing or timeouts.
-	// 当尝试取消异步IO操作的等待失败后 才调用本函数
-	for !netpollblock(pd, int32(mode), true) {
+	for !netpollblock(pd, int32(mode), true) { //windows系统才会把waitio=true
 	}
 }
 
@@ -415,6 +415,7 @@ func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
 	}
 }
 
+//解除底层fd的读写事件阻塞
 //go:linkname poll_runtime_pollUnblock internal/poll.runtime_pollUnblock
 func poll_runtime_pollUnblock(pd *pollDesc) {
 	lock(&pd.lock) //上锁
@@ -426,22 +427,22 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 	pd.wseq++
 	var rg, wg *g
 	pd.publishInfo()
-	rg = netpollunblock(pd, 'r', false) //返回阻塞在该pd上等待read的G
-	wg = netpollunblock(pd, 'w', false) //返回阻塞在该pd上等待write的G
+	rg = netpollunblock(pd, 'r', false) //解除在该pd上等待read的G的阻塞，并返回该G
+	wg = netpollunblock(pd, 'w', false) //解除在该pd上等待write的G的阻塞，并返回该G
 	if pd.rt.f != nil {
-		deltimer(&pd.rt)
+		deltimer(&pd.rt) //异步删除该pd上的超时计时器
 		pd.rt.f = nil
 	}
 	if pd.wt.f != nil {
-		deltimer(&pd.wt)
+		deltimer(&pd.wt) //异步删除该pd上的超时计时器
 		pd.wt.f = nil
 	}
 	unlock(&pd.lock)
 	if rg != nil {
-		netpollgoready(rg, 3) //把所有被阻塞的g唤醒进入runnable态
+		netpollgoready(rg, 3) //把被阻塞的g唤醒进入runnable态
 	}
 	if wg != nil {
-		netpollgoready(wg, 3) //把所有被阻塞的g唤醒进入runnable态
+		netpollgoready(wg, 3) //把被阻塞的g唤醒进入runnable态
 	}
 }
 
@@ -459,13 +460,13 @@ func netpollready(toRun *gList, pd *pollDesc, mode int32) {
 		rg = netpollunblock(pd, 'r', true)
 	}
 	if mode == 'w' || mode == 'r'+'w' {
-		wg = netpollunblock(pd, 'w', true)//在该网络IO上等待的g
+		wg = netpollunblock(pd, 'w', true) //在该网络IO上等待的g
 	}
 	if rg != nil {
 		toRun.push(rg)
 	}
 	if wg != nil {
-		toRun.push(wg)//推到队列里等待处理
+		toRun.push(wg) //推到队列里等待处理
 	}
 }
 
@@ -494,7 +495,7 @@ func netpollcheckerr(pd *pollDesc, mode int32) int {
 	return pollNoError
 }
 
-// gp是当前的用户协程，gpp则是等待网络IO读/写事件的g
+// gp是当前的用户协程，gpp则是等待网络IO读/写事件的用户协程
 func netpollblockcommit(gp *g, gpp unsafe.Pointer) bool {
 	r := atomic.Casuintptr((*uintptr)(gpp), pdWait, uintptr(unsafe.Pointer(gp))) //如果gpp为pdWait（已在等待网络IO事件了），则把gp赋给gpp
 	if r {
@@ -516,13 +517,14 @@ func netpollgoready(gp *g, traceskip int) {
 // waitio - wait only for completed IO, ignore errors
 // Concurrent calls to netpollblock in the same mode are forbidden, as pollDesc
 // can hold only a single waiting goroutine for each mode.
+// 判断当前阻塞在读写事件上的用户协程是否可以恢复执行了
 // 如果IO就绪（例如数据已准备好进行读取或写入）则返回true，如果IO已超时或已关闭（例如读取或写入时连接被关闭）则返回false
 // waitio参数，waitio模式只关心 I/O 操作是否成功完成，而不关心操作过程中可能发生的错误。
 // 禁止在同mode下并发调用netpollblock方法（多个同model的 G 不能同时调用该函数），因为同mode下一个 pollDesc 实例只能阻塞等待一个G，
 // 所以各mode下只能有一个G在调用 netpollblock，（比如mode=读）
 // 如果多个 G 并发调用 netpollblock，它们会争抢同一个 pollDesc，导致不一致的状态或竞争条件。
 func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
-	gpp := &pd.rg
+	gpp := &pd.rg //在等待读写事件的用户协程G
 	if mode == 'w' {
 		gpp = &pd.wg
 	}
@@ -550,7 +552,7 @@ func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 	// need to recheck error states after setting gpp to pdWait
 	// this is necessary because runtime_pollUnblock/runtime_pollSetDeadline/deadlineimpl
 	// do the opposite: store to closing/rd/wd, publishInfo, load of rg/wg
-	if waitio || netpollcheckerr(pd, mode) == pollNoError {
+	if waitio || netpollcheckerr(pd, mode) == pollNoError { //当waitio为true，则忽略底层fd的错误情况
 		//挂起协程，至此，当前G让出执行权
 		gopark(netpollblockcommit, unsafe.Pointer(gpp), waitReasonIOWait, traceEvGoBlockNet, 5)
 	}
@@ -562,7 +564,7 @@ func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 	return old == pdReady
 }
 
-//解除阻塞在io上的G，并返回该G
+//解除在io上等待的G的阻塞，并返回该G
 func netpollunblock(pd *pollDesc, mode int32, ioready bool) *g {
 	gpp := &pd.rg
 	if mode == 'w' {
@@ -570,8 +572,8 @@ func netpollunblock(pd *pollDesc, mode int32, ioready bool) *g {
 	}
 
 	for {
-		old := gpp.Load()//此时old可能是在此网络IO上等待的g的指针
-		if old == pdReady {//已经是就绪了
+		old := gpp.Load()   //此时old可能是在此网络IO上等待的g的指针
+		if old == pdReady { //当前等待的G已经是就绪了
 			return nil
 		}
 		if old == 0 && !ioready {
@@ -584,7 +586,7 @@ func netpollunblock(pd *pollDesc, mode int32, ioready bool) *g {
 			new = pdReady
 		}
 		if gpp.CompareAndSwap(old, new) {
-			if old == pdWait {//G原处于等待状态
+			if old == pdWait { //G原处于等待状态
 				old = 0
 			}
 			return (*g)(unsafe.Pointer(old))
