@@ -107,6 +107,11 @@ func netpollBreak() {
 // delay < 0: blocks indefinitely
 // delay == 0: does not block, just polls
 // delay > 0: block for up to that many nanoseconds
+// netpoll 检查就绪的网络连接，返回runnable的g列表
+// delay < 0: 无限期阻塞等待
+// delay == 0: 不等待，调用后立即返回
+// delay > 0: 阻塞等待delay纳秒
+// 本质上就是调用底层的epollwait实现轮询
 func netpoll(delay int64) gList {
 	if epfd == -1 {
 		return gList{}
