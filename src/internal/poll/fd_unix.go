@@ -606,8 +606,7 @@ func (fd *FD) WriteMsgInet6(p []byte, oob []byte, sa *syscall.SockaddrInet6) (in
 	}
 }
 
-// Accept wraps the accept network call.
-// Accept 封装底层网络调用accept
+// Accept 本方法封装了底层网络调用accept
 func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 	if err := fd.readLock(); err != nil {
 		return -1, nil, "", err
