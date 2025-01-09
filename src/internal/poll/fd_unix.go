@@ -19,23 +19,22 @@ import (
 type FD struct {
 	// Lock sysfd and serialize access to Read and Write methods.
 	// sysfd锁，用于序列化访问 Read 和 Write 方法
-	fdmu fdMutex//该字段用于保护引用计数的并发安全
+	fdmu fdMutex //该字段用于保护底层fd的并发安全（因为本FD结构体可能会被多个协程并发使用）
 
-	// 系统的文件描述符fd，不可变更，只会在 Close 关闭时变为-1
+	// 系统fd，不可篡改，只会在 Close 关闭时变为-1
 	Sysfd int
 
 	// I/O poller.
-	// 底层 I/O poller
-	pd pollDesc
+	pd pollDesc //是 poll.pollDesc，poll.pollDesc 的 runtimeCtx 指向 runtime.pollDesc，runtime.pollDesc 再指向更底层的fd
 
 	// Writev cache.
 	iovecs *[]syscall.Iovec
 
 	// Semaphore signaled when file is closed.
-	csema uint32//当文件被关闭时，该信号量就会发出信号
+	csema uint32 //当文件被关闭时，使用该信号量进行通知
 
 	// Non-zero if this file has been set to blocking mode.
-	// 如果文件被设为阻塞模式，则该值为非0（即1）
+	// 标记该FD实例是否阻塞模式。如果FD被设为阻塞模式，则该值为非0（即1）
 	isBlocking uint32
 
 	// Whether this is a streaming descriptor, as opposed to a
@@ -63,24 +62,25 @@ func (fd *FD) Init(net string, pollable bool) error {
 	if net == "file" {
 		fd.isFile = true
 	}
-	if !pollable {//非pollable，也即阻塞模式
-		fd.isBlocking = 1
+	if !pollable { //非pollable，也即只能是阻塞模式
+		fd.isBlocking = 1 //不可pollable，初始化时默认设置为阻塞模式
 		return nil
 	}
-	err := fd.pd.init(fd)//把fd添加到底层epoll的监听队列里
+	err := fd.pd.init(fd) //初始化底层runtime.pollDesc并创建&初始化epoll实例，然后把fd添加到底层epoll的监听队列里
 	if err != nil {
 		// If we could not initialize the runtime poller,
 		// assume we are using blocking mode.
-		fd.isBlocking = 1
+		// 出现异常，无法初始化runtime.pollDesc，也即无法完成epoll实例的创建，所以先假设使用阻塞模式
+		fd.isBlocking = 1 //创建epoll实例时出现异常，先假设使用阻塞模式
 	}
 	return err
 }
 
-// destroy 关闭底层fd，当该fd不再有引用时才调用
+// destroy 关闭底层fd，当本FD实例不再有引用时（无调用方使用了）才调用
 func (fd *FD) destroy() error {
 	// Poller may want to unregister fd in readiness notification mechanism,
 	// so this must be executed before CloseFunc.
-	// Poller要删掉fd的注册，所以必须在 CloseFunc 前调用
+	// Poller要先删掉fd的注册，所以必须在 CloseFunc 前调用
 	fd.pd.close()
 
 	// We don't use ignoringEINTR here because POSIX does not define
@@ -92,13 +92,13 @@ func (fd *FD) destroy() error {
 	err := CloseFunc(fd.Sysfd)
 
 	fd.Sysfd = -1
-	runtime_Semrelease(&fd.csema)//系统fd被关闭，发出信号
+	runtime_Semrelease(&fd.csema) //系统fd被关闭，发出信号
 	return err
 }
 
 // Close closes the FD. The underlying file descriptor is closed by the
 // destroy method when there are no remaining references.
-// 关闭FD，若底层的文件描述符fd无引用，则会被destroy方法关闭
+// 关闭该FD实例，当底层fd无引用时，则会被destroy方法关闭
 func (fd *FD) Close() error {
 	if !fd.fdmu.increfAndClose() {
 		return errClosing(fd.isFile)
@@ -109,11 +109,12 @@ func (fd *FD) Close() error {
 	// the final decref will close fd.sysfd. This should happen
 	// fairly quickly, since all the I/O is non-blocking, and any
 	// attempts to block in the pollDesc will return errClosing(fd.isFile).
-	fd.pd.evict()//关闭底层socket（底层会唤醒所有阻塞在该fd上的g）
+	// 接触任何IO阻塞，
+	fd.pd.evict() //关闭底层socket（底层会唤醒所有阻塞在该fd上的g）
 
 	// The call to decref will call destroy if there are no other
 	// references.
-	err := fd.decref()//如果该fd已无其他引用，则会关闭底层的fd
+	err := fd.decref() //如果该FD实例已无其他协程调用，则会关闭底层的fd
 
 	// Wait until the descriptor is closed. If this was the only
 	// reference, it is already closed. Only wait if the file has
@@ -121,15 +122,18 @@ func (fd *FD) Close() error {
 	// may be blocking, and that would block the Close.
 	// No need for an atomic read of isBlocking, increfAndClose means
 	// we have exclusive access to fd.
-	if fd.isBlocking == 0 {
-		//等待fd关闭的信号，只在非阻塞模式时才会等待。因为在阻塞模式下，只要有一个IO还在阻塞中，就无法进行关闭
-		runtime_Semacquire(&fd.csema)//等待fd关闭的信号，以确保fd关闭完成
+	// 等待系统fd关闭，如果本FD是唯一引用该系统fd的，则该系统fd理论上是已经关闭了。
+	// 只有当FD是非阻塞模式时，才会等待。因为如果当前还被IO阻塞等待，那么本Close就会因此而被阻塞住
+	// 不需要原子读fd.isBlocking字段的值，因为上面的fd.fdmu.increfAndClose()已经做了互斥保护
+	if fd.isBlocking == 0 { //非阻塞模式
+		//等待系统fd关闭的信号，只在非阻塞模式时才会等待。因为在阻塞模式下，只要有一个IO还在阻塞中，就无法调用本方法CLose()进行关闭
+		runtime_Semacquire(&fd.csema) //等待系统fd关闭的信号，以确保系统fd关闭完成后，本FD实例才继续执行剩下的关闭逻辑
 	}
 
 	return err
 }
 
-// SetBlocking 把文件设为阻塞模式
+// SetBlocking 把FD设为阻塞模式
 func (fd *FD) SetBlocking() error {
 	if err := fd.incref(); err != nil {
 		return err
@@ -140,7 +144,7 @@ func (fd *FD) SetBlocking() error {
 	// from 0 to 1 so there is no real race here.
 	// 原子保存，因此并发调用本函数也不会导致竞态
 	atomic.StoreUint32(&fd.isBlocking, 1)
-	return syscall.SetNonblock(fd.Sysfd, false)//通过系统调用把fd设为非阻塞模式
+	return syscall.SetNonblock(fd.Sysfd, false) //通过系统调用把fd设为非阻塞模式
 }
 
 // Darwin and FreeBSD can't read or write 2GB+ files at a time,
@@ -151,7 +155,7 @@ func (fd *FD) SetBlocking() error {
 const maxRW = 1 << 30
 
 // Read implements io.Reader.
-// 尝试从fd里读取数据，当无数据且是非阻塞时，则会polling，当前g会被挂起
+// 尝试从fd里读取数据，当无数据且是非阻塞时，则会polling，并挂起当前g
 func (fd *FD) Read(p []byte) (int, error) {
 	if err := fd.readLock(); err != nil {
 		return 0, err
@@ -165,18 +169,18 @@ func (fd *FD) Read(p []byte) (int, error) {
 		// TODO(bradfitz): make it wait for readability? (Issue 15735)
 		return 0, nil
 	}
-	if err := fd.pd.prepareRead(fd.isFile); err != nil {
+	if err := fd.pd.prepareRead(fd.isFile); err != nil { //如果对应底层的fd有异常，则退出
 		return 0, err
 	}
-	if fd.IsStream && len(p) > maxRW {//如果是TCP，则一次调用最大返回数据量是maxRW
+	if fd.IsStream && len(p) > maxRW { //如果是TCP，则一次调用最大返回数据量是maxRW
 		p = p[:maxRW]
 	}
 	for {
-		n, err := ignoringEINTRIO(syscall.Read, fd.Sysfd, p)//非阻塞模式，调用底层的系统read后，立即返回
-		if err != nil {
+		n, err := ignoringEINTRIO(syscall.Read, fd.Sysfd, p) //非阻塞模式，调用底层的系统read后，立即返回。这里尝试调用一次，看看该fd是否有数据可读了
+		if err != nil {                                      //未有数据可读，则进入polling
 			n = 0
-			if err == syscall.EAGAIN && fd.pd.pollable() {//如果是poll的，则进入polling等待
-				if err = fd.pd.waitRead(fd.isFile); err == nil {//go会在这挂起，直到有网络事件
+			if err == syscall.EAGAIN && fd.pd.pollable() { //如果是pollable的，则进入polling等待
+				if err = fd.pd.waitRead(fd.isFile); err == nil { //底层调用runtime_pollWait，go会在这挂起（gopark），直到有网络事件
 					continue
 				}
 			}
@@ -617,7 +621,7 @@ func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 	}
 	for {
 		s, rsa, errcall, err := accept(fd.Sysfd)
-		if err == nil {//当有新连接时，走这里
+		if err == nil { //当有新连接时，走这里
 			return s, rsa, "", err
 		}
 		switch err {
@@ -626,9 +630,9 @@ func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 			continue
 		case syscall.EAGAIN:
 			//非阻塞模式，当无连接时走这里
-			if fd.pd.pollable() {//是可poll的
+			if fd.pd.pollable() { //是可poll的
 				//当没有新的连接请求时，则当前协程进入gopark
-				if err = fd.pd.waitRead(fd.isFile); err == nil {//g阻塞在这
+				if err = fd.pd.waitRead(fd.isFile); err == nil { //g阻塞在这
 
 					//网络有io，此时本协程被唤醒，从这里开始执行，并继续执行后续逻辑，continue回到上面accept，获取到一个新连接
 					continue

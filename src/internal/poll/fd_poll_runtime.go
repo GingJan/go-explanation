@@ -18,27 +18,27 @@ import (
 //go:linkname runtimeNano runtime.nanotime
 func runtimeNano() int64
 
-func runtime_pollServerInit()
-func runtime_pollOpen(fd uintptr) (uintptr, int)
-func runtime_pollClose(ctx uintptr) // 把pd指向的底层fd从epoll的监听队列移除
-func runtime_pollWait(ctx uintptr, mode int) int
-func runtime_pollWaitCanceled(ctx uintptr, mode int) int
-func runtime_pollReset(ctx uintptr, mode int) int
+func runtime_pollServerInit()                            //初始化/创建 epoll实例
+func runtime_pollOpen(fd uintptr) (uintptr, int)         //epoll_add(ADD)
+func runtime_pollClose(ctx uintptr)                      // 把pd指向的底层fd从epoll的监听队列移除
+func runtime_pollWait(ctx uintptr, mode int) int         //epoll_wait，对应底层的 runtime.poll_runtime_pollWait 函数
+func runtime_pollWaitCanceled(ctx uintptr, mode int) int //指向 runtime.poll_runtime_pollWaitCanceled
+func runtime_pollReset(ctx uintptr, mode int) int        //重置runtime.pollDesc，以便后续复用
 func runtime_pollSetDeadline(ctx uintptr, d int64, mode int)
-func runtime_pollUnblock(ctx uintptr)
+func runtime_pollUnblock(ctx uintptr) //指向 runtime.poll_runtime_pollUnblock
 func runtime_isPollServerDescriptor(fd uintptr) bool
 
 //是底层系统fd的封装，负责fd和epoll的交互
 type pollDesc struct {
-	runtimeCtx uintptr //指向底层的系统fd
+	runtimeCtx uintptr //指向runtime.pollDesc，而runtime.pollDesc则是指向底层系统fd的封装，当为0时说明该poll.pollDesc是不可pollable的
 }
 
 var serverInit sync.Once
 
-//初始化对fd.Sysfd的poll监听
+//创建并初始化epoll实例，同时添加对fd.Sysfd的监听
 func (pd *pollDesc) init(fd *FD) error {
-	serverInit.Do(runtime_pollServerInit)//初始化对应系统平台的epoll
-	ctx, errno := runtime_pollOpen(uintptr(fd.Sysfd))//把fd.Sysfd指向的系统fd添加到epoll的监听队列里，底层是把fd对应的系统fd添加到epoll的监听队列里，返回的ctx是代表fd的对象（该fd已被监听，使用了 runtime.pollDesc对象来代表被监听的fd）
+	serverInit.Do(runtime_pollServerInit)             //调用对应系统平台的epoll_create，创建并初始化epoll实例
+	ctx, errno := runtime_pollOpen(uintptr(fd.Sysfd)) //把fd.Sysfd指向的系统fd添加到epoll的监听队列里，底层是把fd对应的系统fd添加到epoll的监听队列里，返回的ctx是代表fd的对象（该fd已被监听，使用了 runtime.pollDesc实例 来代表被监听的fd（封装））
 	if errno != 0 {
 		return errnoErr(syscall.Errno(errno))
 	}
@@ -46,29 +46,30 @@ func (pd *pollDesc) init(fd *FD) error {
 	return nil
 }
 
-//把pd.runtimeCtx底层的fd从epoll的监听队列移除，并归还底层runtime.pollDesc对象到复用池
+//把pd.runtimeCtx底层的fd从epoll的监听队列移除，并归还底层runtime.pollDesc实例到复用池
 func (pd *pollDesc) close() {
 	if pd.runtimeCtx == 0 {
 		return
 	}
-	runtime_pollClose(pd.runtimeCtx)//把pd.runtimeCtx底层的fd从监听队列移除，并归还底层runtime.pollDesc对象到复用池
+	runtime_pollClose(pd.runtimeCtx) //把pd.runtimeCtx底层的fd从监听队列移除，并归还底层runtime.pollDesc对象到复用池
 	pd.runtimeCtx = 0
 }
 
 // Evict evicts fd from the pending list, unblocking any I/O running on fd.
-// 把fd从等待队列里移除，同时解除在此fd上的所有阻塞
+// 把底层的fd从epoll的阻塞队列里移除，同时解除在此fd上的所有阻塞
 func (pd *pollDesc) evict() {
 	if pd.runtimeCtx == 0 {
 		return
 	}
 	runtime_pollUnblock(pd.runtimeCtx)
 }
-//重置pd里面的字段
+
+//重置pd里面的runtimeCtx为mode
 func (pd *pollDesc) prepare(mode int, isFile bool) error {
 	if pd.runtimeCtx == 0 {
 		return nil
 	}
-	res := runtime_pollReset(pd.runtimeCtx, mode)
+	res := runtime_pollReset(pd.runtimeCtx, mode) //重置runtime.pollDesc，以便后续复用
 	return convertErr(res, isFile)
 }
 
@@ -84,7 +85,7 @@ func (pd *pollDesc) wait(mode int, isFile bool) error {
 	if pd.runtimeCtx == 0 {
 		return errors.New("waiting for unsupported file type")
 	}
-	res := runtime_pollWait(pd.runtimeCtx, mode)
+	res := runtime_pollWait(pd.runtimeCtx, mode) // 阻塞在此
 	return convertErr(res, isFile)
 }
 
@@ -103,12 +104,14 @@ func (pd *pollDesc) waitCanceled(mode int) {
 	runtime_pollWaitCanceled(pd.runtimeCtx, mode)
 }
 
+// 返回当前pd是否pollable的
 func (pd *pollDesc) pollable() bool {
 	return pd.runtimeCtx != 0
 }
 
 // Error values returned by runtime_pollReset and runtime_pollWait.
 // These must match the values in runtime/netpoll.go.
+// 由runtime_pollReset 和 runtime_pollWait 返回的错误值，必须和runtime/netpoll.go的错误值一致
 const (
 	pollNoError        = 0
 	pollErrClosing     = 1
@@ -131,21 +134,22 @@ func convertErr(res int, isFile bool) error {
 	panic("unreachable")
 }
 
-// SetDeadline sets the read and write deadlines associated with fd.
+// SetDeadline 设置该FD实例等待读和写的超时时间
 func (fd *FD) SetDeadline(t time.Time) error {
 	return setDeadlineImpl(fd, t, 'r'+'w')
 }
 
-// SetReadDeadline sets the read deadline associated with fd.
+// SetReadDeadline 设置该FD实例等待读的超时时间
 func (fd *FD) SetReadDeadline(t time.Time) error {
 	return setDeadlineImpl(fd, t, 'r')
 }
 
-// SetWriteDeadline sets the write deadline associated with fd.
+// SetReadDeadline 设置该FD实例等待写的超时时间
 func (fd *FD) SetWriteDeadline(t time.Time) error {
 	return setDeadlineImpl(fd, t, 'w')
 }
 
+// setDeadlineImpl 设置底层fd等待读/写的超时时间
 func setDeadlineImpl(fd *FD, t time.Time, mode int) error {
 	var d int64
 	if !t.IsZero() {
@@ -165,8 +169,8 @@ func setDeadlineImpl(fd *FD, t time.Time, mode int) error {
 	return nil
 }
 
-// IsPollDescriptor reports whether fd is the descriptor being used by the poller.
-// This is only used for testing.
+// IsPollDescriptor 判断底层fd是否被poller（epoll）监听中
+// 本函数只用于测试阶段
 func IsPollDescriptor(fd uintptr) bool {
 	return runtime_isPollServerDescriptor(fd)
 }

@@ -21,7 +21,10 @@ var (
 	netpollWakeSig uint32 // used to avoid duplicate calls of netpollBreak
 )
 
-//netpoll初始化
+// BSD和mac的epoll —— kevent 的初始化
+// 1.创建epoll实例
+// 2.创建非阻塞读写管道pipe（用于终端epoll阻塞）
+// 3.epoll添加对管道读事件的监听
 func netpollinit() {
 	kq = kqueue()
 	if kq < 0 {

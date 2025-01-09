@@ -12,6 +12,7 @@ import (
 )
 
 // Writev wraps the writev system call.
+// Writev 封装了系统调用writev()
 func (fd *FD) Writev(v *[][]byte) (int64, error) {
 	if err := fd.writeLock(); err != nil {
 		return 0, err

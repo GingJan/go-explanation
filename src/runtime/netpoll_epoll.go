@@ -34,7 +34,7 @@ var (
 // 2.创建非阻塞读写管道pipe（用于终端epoll阻塞）
 // 3.epoll添加对管道读事件的监听
 func netpollinit() {
-	epfd = epollcreate1(_EPOLL_CLOEXEC)//创建一个 epoll文件描述
+	epfd = epollcreate1(_EPOLL_CLOEXEC) //创建一个 epoll文件描述
 	if epfd < 0 {
 		epfd = epollcreate(1024)
 		if epfd < 0 {
@@ -43,7 +43,7 @@ func netpollinit() {
 		}
 		closeonexec(epfd)
 	}
-	r, w, errno := nonblockingPipe()//创建一个非阻塞读写的管道
+	r, w, errno := nonblockingPipe() //创建一个非阻塞读写的管道
 	if errno != 0 {
 		println("runtime: pipe failed with", -errno)
 		throw("runtime: pipe failed")
@@ -52,7 +52,7 @@ func netpollinit() {
 		events: _EPOLLIN,
 	}
 	*(**uintptr)(unsafe.Pointer(&ev.data)) = &netpollBreakRd
-	errno = epollctl(epfd, _EPOLL_CTL_ADD, r, &ev)//添加对管道读事件的监听
+	errno = epollctl(epfd, _EPOLL_CTL_ADD, r, &ev) //添加对管道读事件的监听
 	if errno != 0 {
 		println("runtime: epollctl failed with", -errno)
 		throw("runtime: epollctl failed")
@@ -69,7 +69,7 @@ func netpollopen(fd uintptr, pd *pollDesc) int32 {
 	var ev epollevent
 	ev.events = _EPOLLIN | _EPOLLOUT | _EPOLLRDHUP | _EPOLLET
 	*(**pollDesc)(unsafe.Pointer(&ev.data)) = pd
-	return -epollctl(epfd, _EPOLL_CTL_ADD, int32(fd), &ev)
+	return -epollctl(epfd, _EPOLL_CTL_ADD, int32(fd), &ev) //调用 epollctl 函数，将指定的fd添加到 epoll 实例中进行监听。返回错误码（错误码是负数，所以使用-，负负得正）
 }
 
 func netpollclose(fd uintptr) int32 {
