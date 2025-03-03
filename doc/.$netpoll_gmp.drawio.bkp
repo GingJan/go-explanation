@@ -1,0 +1,376 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.0.4 Chrome/128.0.6613.186 Electron/32.2.5 Safari/537.36" version="26.0.4">
+  <diagram name="第 1 页" id="v9q7LXnlIorYgL3HsIEE">
+    <mxGraphModel dx="3600" dy="2655" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-6" value="delay = 0" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-1" target="Sk7xQULKz6HRvgxIj6d6-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-1" value="runtime.startTheWorldWithSema()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-1460" y="280" width="210" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-8" value="delay = 0 | n" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-2" target="Sk7xQULKz6HRvgxIj6d6-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-2" value="runtime.findrunnable()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-1170" y="280" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-10" value="&lt;meta charset=&quot;utf-8&quot;&gt;&lt;span style=&quot;color: rgb(0, 0, 0); font-family: Helvetica; font-size: 11px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: center; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: nowrap; background-color: rgb(255, 255, 255); text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;&quot;&gt;delay = 0&lt;/span&gt;" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-3" target="Sk7xQULKz6HRvgxIj6d6-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-3" value="runtime.pollWork()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-790" y="280" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-9" value="&lt;meta charset=&quot;utf-8&quot;&gt;&lt;span style=&quot;color: rgb(0, 0, 0); font-family: Helvetica; font-size: 11px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: center; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: nowrap; background-color: rgb(255, 255, 255); text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;&quot;&gt;delay = 0&lt;/span&gt;" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-4" target="Sk7xQULKz6HRvgxIj6d6-5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-4" value="runtime.sysmon()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-960" y="280" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-5" value="runtime.netpoll(delay int64)&lt;div&gt;（相当于epoll_wait）&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-940" y="790" width="210" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-11" value="runtime.netpollBreak()&lt;div&gt;（中断epoll_wait）&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-1250" y="790" width="210" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-12" value="runtime.netpollclose(fd uintptr)&lt;div&gt;（相当于epoll_ctl(DEL)）&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="790" width="210" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-13" value="runtime.netpollopen(fd uintptr, pd *pollDesc)&lt;div&gt;（相当于epoll_ctl(ADD)）&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-280" y="790" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-14" value="runtime.netpollinit()&lt;br&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;(相当于epoll_create）&lt;/span&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-580" y="790" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-15" target="Sk7xQULKz6HRvgxIj6d6-14">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-15" value="runtime.netpollGenericInit()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-580" y="280" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-19" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-16" target="Sk7xQULKz6HRvgxIj6d6-15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-16" value="poll.runtime_pollServerInit()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-580" y="150" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-18" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-17" target="Sk7xQULKz6HRvgxIj6d6-16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-26" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-17" target="Sk7xQULKz6HRvgxIj6d6-24">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-17" value="poll.pollDesc.init(fd *FD)&lt;br&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;(相当于epoll_create+epoll_ctl(ADD, fd)）&lt;/span&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-580" y="20" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-22" target="Sk7xQULKz6HRvgxIj6d6-17">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-22" value="poll.FD.Init(net string, pollable bool)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-580" y="-100" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-27" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-24" target="Sk7xQULKz6HRvgxIj6d6-25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-24" value="poll.runtime_pollOpen(fd uintptr)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-280" y="150" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-25" target="Sk7xQULKz6HRvgxIj6d6-13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-25" value="runtime.poll_runtime_pollOpen(fd uintptr)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-280" y="280" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-29" target="Sk7xQULKz6HRvgxIj6d6-12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-29" value="runtime.poll_runtime_pollClose(pd *pollDesc)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="280" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-32" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-31" target="Sk7xQULKz6HRvgxIj6d6-29">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-31" value="poll.runtime_pollClose(ctx uintptr)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="150" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-35" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-33" target="Sk7xQULKz6HRvgxIj6d6-31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-33" value="poll.pollDesc.close()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="20" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-36" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-34" target="Sk7xQULKz6HRvgxIj6d6-33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-39" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-38" target="Sk7xQULKz6HRvgxIj6d6-34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-57" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-38" target="Sk7xQULKz6HRvgxIj6d6-52">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-38" value="poll.FD.Close()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="-220" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-48" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-41" target="Sk7xQULKz6HRvgxIj6d6-40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-41" value="runtime.poll_runtime_pollWait(pd *pollDesc, mode int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1880" y="280" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-47" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-42" target="Sk7xQULKz6HRvgxIj6d6-41">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-42" value="poll.runtime_pollWait(ctx uintptr, mode int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1880" y="150" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-46" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-43" target="Sk7xQULKz6HRvgxIj6d6-42">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-43" value="poll.pollDesc.wait(mode int, isFile bool)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1905" y="20" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-45" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-44" target="Sk7xQULKz6HRvgxIj6d6-43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-44" value="poll.FD.Wrirte() 及其他write" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="2030" y="-420" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-49" value="netpoll.go / runtime.netpollunblock(pd *pollDesc, mode int32, ioready bool)&lt;div&gt;解除G的阻塞&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="370" y="790" width="340" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-56" value="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-50" target="Sk7xQULKz6HRvgxIj6d6-49">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-63" value="2" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-50" target="Sk7xQULKz6HRvgxIj6d6-58">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-50" value="runtime.poll_runtime_pollUnblock(pd *pollDesc)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="280" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-55" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-51" target="Sk7xQULKz6HRvgxIj6d6-50">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-51" value="poll.runtime_pollUnblock(ctx uintptr)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="150" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-54" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-52" target="Sk7xQULKz6HRvgxIj6d6-51">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-52" value="poll.pollDesc.evict()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="405" y="20" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-34" value="poll.FD.destroy()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="-100" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-60" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-58" target="Sk7xQULKz6HRvgxIj6d6-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-58" value="netpoll.go / runtime.netpollgoready(gp *g, traceskip int)&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;调用gopark()，挂起当前G&lt;/span&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="730" y="790" width="340" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-115" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-59" target="Sk7xQULKz6HRvgxIj6d6-114">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-59" value="proc.go / runtime.goready(gp *g, traceskip int)&lt;br&gt;在g0里调用ready()，把G设为runnable" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="730" y="1150" width="340" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-40" value="netpoll.go / runtime.netpollblock(pd *pollDesc, mode int32, waitio bool)&lt;div&gt;调用gopark()，挂起当前G&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1835" y="810" width="410" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-65" value="2" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-64" target="Sk7xQULKz6HRvgxIj6d6-40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-76" value="3" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;jumpStyle=arc;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-64" target="Sk7xQULKz6HRvgxIj6d6-58">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-87" value="1" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-64" target="Sk7xQULKz6HRvgxIj6d6-80">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-64" value="runtime.poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1450" y="280" width="390" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-88" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-68" target="Sk7xQULKz6HRvgxIj6d6-64">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-68" value="poll.runtime_pollSetDeadline(ctx uintptr, d int64, mode int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1485" y="150" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-72" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-71" target="Sk7xQULKz6HRvgxIj6d6-68">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-71" value="poll.setDeadlineImpl(fd *FD, t time.Time, mode int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1485" y="20" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-75" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-73" target="Sk7xQULKz6HRvgxIj6d6-71">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-73" value="poll.FD.SetDeadline(t time.Time)&lt;div&gt;poll.FD.SetReadDeadline(t time.Time)&lt;br&gt;&lt;/div&gt;&lt;div&gt;poll.FD.SetWriteDeadline(t time.Time)&lt;br&gt;&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1510" y="-220" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-78" value="2" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-77" target="Sk7xQULKz6HRvgxIj6d6-58">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-79" value="1" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;jumpStyle=arc;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-77" target="Sk7xQULKz6HRvgxIj6d6-40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-77" value="netpoll.go / runtime.netpolldeadlineimpl(pd *pollDesc, seq uintptr, read, write bool)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="500" width="460" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-81" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-80" target="Sk7xQULKz6HRvgxIj6d6-77">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-80" value="netpoll.go / runtime.netpollDeadline(arg any, seq uintptr)&lt;div&gt;netpoll.go / runtime.netpollReadDeadline(arg any, seq uintptr)&lt;br&gt;&lt;/div&gt;&lt;div&gt;netpoll.go / runtime.netpollWriteDeadline(arg any, seq uintptr)&lt;br&gt;&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="405" width="380" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-90" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-89" target="Sk7xQULKz6HRvgxIj6d6-43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-89" value="poll.FD.Read() 及其他read" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="2230" y="-220" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-92" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-91" target="Sk7xQULKz6HRvgxIj6d6-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-91" value="chan.go / runtime.send(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1745" y="1200" width="490" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-97" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-93" target="Sk7xQULKz6HRvgxIj6d6-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-93" value="chan.go / runtime.closechan(c *hchan)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1745" y="1350" width="490" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-96" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-94" target="Sk7xQULKz6HRvgxIj6d6-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-94" value="chan.go / runtime.recv(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1755" y="1040" width="490" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-101" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-98" target="Sk7xQULKz6HRvgxIj6d6-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-98" value="lock_js.go / runtime.notewakeup(n *note)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="1460" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-100" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-99" target="Sk7xQULKz6HRvgxIj6d6-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-99" value="lock_js.go / runtime.checkTimeouts()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="1380" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-103" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-102" target="Sk7xQULKz6HRvgxIj6d6-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-102" value="sema.go / runtime.readyWithTime(s *sudog, traceskip int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="570" y="1570" width="330" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-105" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-104" target="Sk7xQULKz6HRvgxIj6d6-59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-104" value="time.go / runtime.goroutineReady(arg any, seq uintptr)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="1460" width="330" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-107" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-106" target="Sk7xQULKz6HRvgxIj6d6-102">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-106" value="sema.go / runtime.semrelease1(addr *uint32, handoff bool, skipframes int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="460" y="1770" width="440" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-112" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-108" target="Sk7xQULKz6HRvgxIj6d6-106">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-108" value="proc.go / runtime.startTheWorld()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="210" y="1950" width="210" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-111" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-109" target="Sk7xQULKz6HRvgxIj6d6-106">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-109" value="sync.go / sync.runtime_Semrelease" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="540" y="1950" width="220" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-113" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-110" target="Sk7xQULKz6HRvgxIj6d6-106">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-110" value="sema.go / runtime.semrelease(addr *uint32)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="870" y="1950" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-114" value="proc.go / runtime.ready(gp *g, traceskip int, next bool)&lt;br&gt;把G设为runnable" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="990" y="1560" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-117" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-116" target="Sk7xQULKz6HRvgxIj6d6-114">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-116" value="mgc.go / runtime.gcSweep(mode gcMode)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1600" y="1700" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-121" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-118" target="Sk7xQULKz6HRvgxIj6d6-116">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-118" value="mgc.go / runtime.gcMarkTermination(nextTriggerRatio float64)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="2020" y="1700" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-120" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-119" target="Sk7xQULKz6HRvgxIj6d6-114">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-119" value="mgcmark.go / runtime.gcFlushBgCredit(scanWork int64)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1590" y="1860" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-124" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-123" target="Sk7xQULKz6HRvgxIj6d6-114">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-123" value="preempt.go / runtime.resumeG(state suspendGState)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1585" y="1960" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-126" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-125" target="Sk7xQULKz6HRvgxIj6d6-114">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-125" value="proc.go / runtime.findrunnable()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1585" y="2060" width="320" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-128" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-127" target="Sk7xQULKz6HRvgxIj6d6-43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-127" value="poll.FD.waitRead(isFile bool)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1790" y="-300" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-130" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-129" target="Sk7xQULKz6HRvgxIj6d6-127">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-129" value="poll.FD.Accept()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1625" y="-480" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-132" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-131" target="Sk7xQULKz6HRvgxIj6d6-129">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-131" value="net.netFD.accept()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1450" y="-614" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-134" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-133" target="Sk7xQULKz6HRvgxIj6d6-131">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-133" value="net.TCPListener.accept()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="-800" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-136" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-135" target="Sk7xQULKz6HRvgxIj6d6-131">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-135" value="net.UnixListener.accept()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1570" y="-800" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-138" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-137" target="Sk7xQULKz6HRvgxIj6d6-133">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-137" value="net.TCPListener.Accept()&amp;nbsp;(Conn, error)&lt;div&gt;net.TCPListener.AcceptTCP() (*TCPConn, error)&lt;br&gt;&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="-950" width="270" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-140" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="Sk7xQULKz6HRvgxIj6d6-139" target="Sk7xQULKz6HRvgxIj6d6-135">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="Sk7xQULKz6HRvgxIj6d6-139" value="net.&amp;nbsp;UnixListener.Accept()&amp;nbsp;(Conn, error)&lt;div&gt;net.UnixListener.AcceptTCP() (*UnixConn, error)&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1580" y="-950" width="270" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

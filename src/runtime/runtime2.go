@@ -566,8 +566,8 @@ type m struct {
 	p             puintptr          // 当前工作线程绑定的 p // 获取一个P以执行go代码（如果没在执行go的代码时，为nil） attached p for executing go code (nil if not executing go code)
 	nextp         puintptr          // 下一个p
 	oldp          puintptr          // 在执行系统调用之前所关联的p the p that was attached before executing a syscall
-	id            int64             //m的标识
-	mallocing     int32
+	id            int64             // m的标识
+	mallocing     int32             // 当前m是否正在分配内存中，>0是
 	throwing      int32
 	preemptoff    string // 该字段不等于空字符串的话，要保持 curg 始终在这个 m 上运行 // if != "", keep curg running on this m
 	locks         int32  // 大于0，则表示当前m被锁起（被占用）
@@ -782,7 +782,7 @@ type p struct {
 type schedt struct {
 	// accessed atomically. keep at top to ensure alignment on 32-bit systems.
 	goidgen   uint64 // goroutine的id计数器，当前存放的是最后一个goroutine的id，有新的goroutine时，需要在该值上加1
-	lastpoll  uint64 // 上次轮询请求网络的时间点，0则表示当前正在轮询网络中 time of last network poll, 0 if currently polling
+	lastpoll  uint64 // 上次轮询请求网络的时间点，0则表示当前正在polling中 time of last network poll, 0 if currently polling
 	pollUntil uint64 // time to which current poll is sleeping
 
 	lock mutex //本互斥锁用于保护本结构体的字段
@@ -805,8 +805,8 @@ type schedt struct {
 	nmspinning uint32   // See "Worker thread parking/unparking" comment in proc.go.
 
 	// Global runnable queue.
-	runq     gQueue // 全局G队列（处于runnable态的）
-	runqsize int32
+	runq     gQueue // 全局队列（处于runnable态的G）
+	runqsize int32  // 全局队列当前的G个数
 
 	// disable controls selective disabling of the scheduler.
 	//
@@ -842,7 +842,7 @@ type schedt struct {
 	// 等待释放的m，这些m会被回收，给回操作系统
 	freem *m
 
-	gcwaiting  uint32 // gc is waiting to run
+	gcwaiting  uint32 // GC是否等待执行 gc is waiting to run
 	stopwait   int32
 	stopnote   note
 	sysmonwait uint32
@@ -1121,7 +1121,7 @@ func (w waitReason) String() string {
 
 var (
 	allm       *m    // 全局m链表队列，所有的m构成的一个链表，包括下面的m0
-	gomaxprocs int32 // p的最大值，默认等于ncpu，但可以通过GOMAXPROCS修改
+	gomaxprocs int32 // P的最大数量，默认等于ncpu，但可以通过GOMAXPROCS修改
 	ncpu       int32 // 系统中cpu核的数量，程序启动时由runtime代码初始化
 	forcegc    forcegcstate
 	sched      schedt // 调度器结构体实例，记录了调度器的工作状态
@@ -1154,7 +1154,7 @@ var (
 	gcBgMarkWorkerPool lfstack //被挂起的GC后台任务的池子
 
 	// Total number of gcBgMarkWorker goroutines. Protected by worldsema.
-	gcBgMarkWorkerCount int32
+	gcBgMarkWorkerCount int32 // gcBgMarkWorker的数量
 
 	// Information about what cpu features are available.
 	// Packages outside the runtime should not use these

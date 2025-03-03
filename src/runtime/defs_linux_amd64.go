@@ -173,7 +173,7 @@ type sigevent struct {
 }
 
 type epollevent struct {
-	events uint32
+	events uint32  //触发的事件类型
 	data   [8]byte // unaligned uintptr
 }
 

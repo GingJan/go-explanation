@@ -26,9 +26,9 @@ type timer struct {
 	// a well-behaved function and not block.
 	//
 	// when must be positive on an active timer.
-	when   int64
-	period int64
-	f      func(any, uintptr)
+	when   int64              //计时器在when时唤醒
+	period int64              //下一个唤醒周期，也即计时器在 when+period 再次唤醒
+	f      func(any, uintptr) // 计时器唤醒时执行的函数
 	arg    any
 	seq    uintptr
 
@@ -123,6 +123,8 @@ const (
 
 	// Waiting for timer to fire.
 	// The timer is in some P's heap.
+	// 等待timer唤醒
+	// timer实例在某个P的堆里
 	timerWaiting
 
 	// Running the timer function.

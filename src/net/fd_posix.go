@@ -20,17 +20,17 @@ type netFD struct {
 
 	// immutable until Close
 	family      int
-	sotype      int //socket type 有 syscall.SOCK_STREAM、SOCK_DGRAM、SOCK_RAW、SOCK_RDM、SOCK_SEQPACKET
-	isConnected bool // handshake completed or use of association with peer
-	net         string
-	laddr       Addr //本地地址
-	raddr       Addr //对端地址
+	sotype      int    //socket type 有 syscall.SOCK_STREAM、SOCK_DGRAM、SOCK_RAW、SOCK_RDM、SOCK_SEQPACKET
+	isConnected bool   // handshake completed or use of association with peer
+	net         string // "file" 或
+	laddr       Addr   //本端地址
+	raddr       Addr   //对端地址
 }
 
 func (fd *netFD) setAddr(laddr, raddr Addr) {
 	fd.laddr = laddr
 	fd.raddr = raddr
-	runtime.SetFinalizer(fd, (*netFD).Close)
+	runtime.SetFinalizer(fd, (*netFD).Close) //当fd被GC时，调用Close
 }
 
 func (fd *netFD) Close() error {
@@ -53,7 +53,7 @@ func (fd *netFD) closeWrite() error {
 }
 
 func (fd *netFD) Read(p []byte) (n int, err error) {
-	n, err = fd.pfd.Read(p)//若没有数据，协程则被阻塞在这
+	n, err = fd.pfd.Read(p) //若没有数据，协程则被阻塞在这
 
 	//若跑到这里，说明协程被唤醒，也即有数据了
 	runtime.KeepAlive(fd)
@@ -96,7 +96,7 @@ func (fd *netFD) readMsgInet6(p []byte, oob []byte, flags int, sa *syscall.Socka
 }
 
 func (fd *netFD) Write(p []byte) (nn int, err error) {
-	nn, err = fd.pfd.Write(p)//会挂起当前协程
+	nn, err = fd.pfd.Write(p) //会挂起当前协程
 	runtime.KeepAlive(fd)
 	return nn, wrapSyscallError(writeSyscallName, err)
 }

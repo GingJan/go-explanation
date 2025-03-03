@@ -52,6 +52,11 @@ func init() {
 // the garbage collector from transitioning to mark termination since
 // gcWork may locally hold GC work buffers. This can be done by
 // disabling preemption (systemstack or acquirem).
+//
+// 垃圾回收器工作池的抽象
+// 本结构体实现了 生产/消费 模式。被标记为灰的对象在本池里，黑对象则不在本池里
+// 代表垃圾回收中的工作队列，通常包含了待处理的任务、对象或需要处理的内存区域。
+// 在垃圾回收过程中，系统会将需要执行的任务放入 gcWork 队列，gcDrain 则负责从这个队列中抽取并处理任务。
 type gcWork struct {
 	// wbuf1 and wbuf2 are the primary and secondary work buffers.
 	//

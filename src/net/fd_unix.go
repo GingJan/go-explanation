@@ -23,6 +23,7 @@ const (
 	writeMsgSyscallName = "sendmsg"
 )
 
+//返回一个封装sysfd的netFD实例
 func newFD(sysfd, family, sotype int, net string) (*netFD, error) {
 	ret := &netFD{
 		pfd: poll.FD{
@@ -184,11 +185,11 @@ func (fd *netFD) accept() (netfd *netFD, err error) {
 		poll.CloseFunc(d)
 		return nil, err
 	}
-	if err = netfd.init(); err != nil {//epoll的创建 + 新连接fd（d变量）被添加到监听队列
+	if err = netfd.init(); err != nil { //epoll的创建 + 新连接fd（d变量）被添加到监听队列
 		netfd.Close()
 		return nil, err
 	}
-	lsa, _ := syscall.Getsockname(netfd.pfd.Sysfd)//Sysfd存放的是系统的fd标识
+	lsa, _ := syscall.Getsockname(netfd.pfd.Sysfd) //Sysfd存放的是系统的fd标识
 	netfd.setAddr(netfd.addrFunc()(lsa), netfd.addrFunc()(rsa))
 	return netfd, nil
 }

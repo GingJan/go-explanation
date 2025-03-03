@@ -38,7 +38,7 @@ type sweepdata struct {
 	parked  bool
 	started bool
 
-	nbgsweep    uint32
+	nbgsweep    uint32 //已完成gc清理的次数
 	npausesweep uint32
 
 	// active tracks outstanding sweepers and the sweep

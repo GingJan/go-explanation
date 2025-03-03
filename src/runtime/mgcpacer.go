@@ -213,6 +213,7 @@ type gcControllerState struct {
 	// includes the "scannable" parts of objects.
 	//
 	// Updated when the world is stopped.
+	// 本字段存放着最近一次GC周期对堆所扫描的字节数
 	lastHeapScan uint64
 
 	// stackScan is a snapshot of scannableStackSize taken at each GC

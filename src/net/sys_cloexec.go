@@ -17,12 +17,13 @@ import (
 
 // Wrapper around the socket system call that marks the returned file
 // descriptor as nonblocking and close-on-exec.
+// 封装系统调用socket，并设置非阻塞，close-on-exec的fd
 func sysSocket(family, sotype, proto int) (int, error) {
 	// See ../syscall/exec_unix.go for description of ForkLock.
 	syscall.ForkLock.RLock()
-	s, err := socketFunc(family, sotype, proto)
+	s, err := socketFunc(family, sotype, proto) //系统调用，创建fd
 	if err == nil {
-		syscall.CloseOnExec(s)//closeOnExec
+		syscall.CloseOnExec(s) //closeOnExec
 	}
 	syscall.ForkLock.RUnlock()
 	if err != nil {

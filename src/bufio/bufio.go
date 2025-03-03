@@ -32,7 +32,7 @@ var (
 // Reader 为io.Reader实现了缓冲功能
 type Reader struct {
 	buf          []byte    //环形切片，读写都在该切片内进行（可参考环形链表），w-r代表剩余可写入数据的空间，若w-r < len(buf) 说明环形切片未满
-	rd           io.Reader // 调用者注入的reader（底层reader）
+	rd           io.Reader // 调用者注入的reader（底层reader），读取该reader时可能会被阻塞，挂起当前goroutine
 	r, w         int       // 表示r读/w写在 buf 切片的下标（环形切片）
 	err          error     // 错误信息
 	lastByte     int       // last byte read for UnreadByte; -1 代表无效
@@ -50,12 +50,12 @@ const maxConsecutiveEmptyReads = 100
 func NewReaderSize(rd io.Reader, size int) *Reader {
 	// 若传入的rd已经是Reader了
 	b, ok := rd.(*Reader)
-	if ok && len(b.buf) >= size {//rd拥有一个比size还大的缓冲，则直接返回传入的rd
+	if ok && len(b.buf) >= size { //rd拥有一个比size还大的缓冲，则直接返回传入的rd
 		return b
 	}
 
 	// 传入的rd缓冲不够，则新建一个Reader，并把rd作为底层Reader
-	if size < minReadBufferSize {//最少得16B
+	if size < minReadBufferSize { //最少得16B
 		size = minReadBufferSize
 	}
 	r := new(Reader)
@@ -86,8 +86,8 @@ func (b *Reader) Reset(r io.Reader) {
 
 func (b *Reader) reset(buf []byte, r io.Reader) {
 	*b = Reader{
-		buf:          buf,//本对象的缓冲区
-		rd:           r,  //底层reader
+		buf:          buf, //本对象的缓冲区
+		rd:           r,   //底层reader
 		lastByte:     -1,
 		lastRuneSize: -1,
 	}
@@ -96,7 +96,7 @@ func (b *Reader) reset(buf []byte, r io.Reader) {
 var errNegativeRead = errors.New("bufio: reader returned negative count from Read")
 
 // fill reads a new chunk into the buffer.
-// fill 从底层b.rd处读取新数据段到缓冲b.buf以填满
+// fill 从底层 b.rd 处读取新数据块到缓冲区 b.buf 以填满
 func (b *Reader) fill() {
 	// 把剩余的数据都挪到buf的起始位置
 	if b.r > 0 {
@@ -112,7 +112,7 @@ func (b *Reader) fill() {
 	// Read new data: try a limited number of times.
 	// 从底层数据流读取新的数据：尝试 maxConsecutiveEmptyReads 次后底层依旧无数据或b.buf满了就返回错误
 	for i := maxConsecutiveEmptyReads; i > 0; i-- {
-		n, err := b.rd.Read(b.buf[b.w:]) //从rd里读取数据到b.buf的[b.w:]里，b.w是b.buf可写的起始点
+		n, err := b.rd.Read(b.buf[b.w:]) //从rd里读取数据到b.buf的[b.w:]里，b.w是b.buf可写的起始点，这里可能会被阻塞（如果rd是网络连接）以至于当前goroutine会被挂起
 		if n < 0 {
 			panic(errNegativeRead)
 		}
@@ -125,7 +125,7 @@ func (b *Reader) fill() {
 			return
 		}
 	}
-	b.err = io.ErrNoProgress
+	b.err = io.ErrNoProgress //多次尝试读取数据后依旧无数据，失败
 }
 
 // readErr 返回b.err的错误，并清空
@@ -146,7 +146,6 @@ func (b *Reader) readErr() error {
 // Peek 从b.buf读取n个字节数据而不推进b.buf的读取进度（可重复读取该数据段，因为b.r没有推进）
 // 如果返回的字节数少于n个，error也会返回错误（提示为什么少于）
 // 如果n大于b的缓冲大小，则返回 ErrBufferFull
-//
 func (b *Reader) Peek(n int) ([]byte, error) {
 	if n < 0 {
 		return nil, ErrNegativeCount
@@ -196,9 +195,9 @@ func (b *Reader) Discard(n int) (discarded int, err error) {
 	remain := n
 	for {
 		skip := b.Buffered()
-		if skip == 0 {//没有剩余数据了
-			b.fill()//从底层rd读取数据到本Reader的buf里
-			skip = b.Buffered()//再看看还剩下多少字节的数据
+		if skip == 0 { //没有剩余数据了
+			b.fill()            //从底层rd读取数据到本Reader的buf里
+			skip = b.Buffered() //再看看还剩下多少字节的数据
 		}
 		if skip > remain {
 			skip = remain
@@ -320,12 +319,12 @@ func (b *Reader) ReadRune() (r rune, size int, err error) {
 		b.fill() // 本Reader的buf还没满，则从底层rd读取数据以把本Reader的buf填满
 	}
 	b.lastRuneSize = -1
-	if b.r == b.w {//数据已经没了
+	if b.r == b.w { //数据已经没了
 		return 0, 0, b.readErr()
 	}
-	r, size = rune(b.buf[b.r]), 1//先取一个字节出来，判断是否多字节字符
-	if r >= utf8.RuneSelf {//如果是多字节字符
-		r, size = utf8.DecodeRune(b.buf[b.r:b.w])//将剩余的数据按UTF-8编码，解码成一个字符并确定解码所需的字节数。
+	r, size = rune(b.buf[b.r]), 1 //先取一个字节出来，判断是否多字节字符
+	if r >= utf8.RuneSelf {       //如果是多字节字符
+		r, size = utf8.DecodeRune(b.buf[b.r:b.w]) //将剩余的数据按UTF-8编码，解码成一个字符并确定解码所需的字节数。
 	}
 	b.r += size
 	b.lastByte = int(b.buf[b.r-1])
@@ -595,7 +594,7 @@ func (b *Reader) writeBuf(w io.Writer) (int64, error) {
 type Writer struct {
 	err error
 	buf []byte
-	n   int // 已经使用的字节数，或当前写入的位置
+	n   int       // 已经使用的字节数，或当前写入的位置
 	wr  io.Writer //指向底层Writer
 }
 
@@ -675,7 +674,7 @@ func (b *Writer) Available() int { return len(b.buf) - b.n }
 // 并且该切片是一个空切片（长度为0）。具体来说，它提供了 b.buf 中从位置 b.n 开始到切片末尾的缓冲区空间，
 // 但是并没有实际的内容，它的长度被设置为0，意味着可以将数据追加到该切片中。
 func (b *Writer) AvailableBuffer() []byte {
-	return b.buf[b.n:][:0]//截取操作，截取到长度为0，但是容量是原子切片的剩余容量。这实际上创建了一个零长度的切片，但它仍然指向原始切片 b.buf[b.n:] 的底层数组(切片的底层数组)。通过这种方式，可以确保返回的切片仍然能够增长，且不会再创建新的内存空间。
+	return b.buf[b.n:][:0] //截取操作，截取到长度为0，但是容量是原子切片的剩余容量。这实际上创建了一个零长度的切片，但它仍然指向原始切片 b.buf[b.n:] 的底层数组(切片的底层数组)。通过这种方式，可以确保返回的切片仍然能够增长，且不会再创建新的内存空间。
 }
 
 // Buffered 返回已写入当前Writer缓冲区的字节个数
@@ -689,13 +688,13 @@ func (b *Writer) Buffered() int { return b.n }
 func (b *Writer) Write(p []byte) (nn int, err error) {
 	for len(p) > b.Available() && b.err == nil {
 		var n int
-		if b.Buffered() == 0 {//当前缓冲区未有数据
+		if b.Buffered() == 0 { //当前缓冲区未有数据
 			// 则直接把p里数据写入到底层的wr，避免多一次复制
 			n, b.err = b.wr.Write(p)
 		} else {
-			n = copy(b.buf[b.n:], p)//把p的数据写入到本Writer的buf里
+			n = copy(b.buf[b.n:], p) //把p的数据写入到本Writer的buf里
 			b.n += n
-			b.Flush()//然后再把本Writer的buf数据全部写入到底层wr
+			b.Flush() //然后再把本Writer的buf数据全部写入到底层wr
 		}
 		nn += n
 		p = p[n:]

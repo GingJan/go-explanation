@@ -296,7 +296,7 @@ func os_beforeExit() {
 
 // start forcegc helper goroutine
 func init() {
-	go forcegchelper()
+	go forcegchelper() //启动定时触发GC
 }
 
 func forcegchelper() {
@@ -314,7 +314,7 @@ func forcegchelper() {
 			println("GC forced")
 		}
 		// Time-triggered, fully concurrent.
-		gcStart(gcTrigger{kind: gcTriggerTime, now: nanotime()})
+		gcStart(gcTrigger{kind: gcTriggerTime, now: nanotime()}) //定时触发全并发GC（也即标记+清除都是并发模式）
 	}
 }
 
@@ -877,10 +877,9 @@ func fastrandinit() {
 	getRandomData(s)
 }
 
-// Mark gp ready to run.
 // 本函数必定在g0里执行
 // 本函数实现以下行为
-// 1.把gp从等待态改为可执行态
+// 1.把gp从等待态改为可执行态runnable
 // 2.把gp放入当前M所在P的本地队列里（该队列里的g都是runnable态）
 // 3.尝试调度空闲的P来执行gp
 func ready(gp *g, traceskip int, next bool) {
@@ -888,11 +887,11 @@ func ready(gp *g, traceskip int, next bool) {
 		traceGoUnpark(gp, traceskip)
 	}
 
-	status := readgstatus(gp)
+	status := readgstatus(gp) //读取gp当前的状态
 
 	// Mark runnable.
 	_g_ := getg()    //g0
-	mp := acquirem() // mp是g0上的m disable preemption because it can be holding p in a local var
+	mp := acquirem() // 禁用抢占 disable preemption because it can be holding p in a local var
 	if status&^_Gscan != _Gwaiting {
 		dumpgstatus(gp)
 		throw("bad g->status in ready")
@@ -900,7 +899,7 @@ func ready(gp *g, traceskip int, next bool) {
 
 	// status is Gwaiting or Gscanwaiting, make Grunnable and put on runq
 	casgstatus(gp, _Gwaiting, _Grunnable)
-	runqput(_g_.m.p.ptr(), gp, next) //把gp放入当前p的本地队列里（该队列里的g都是runnable态）
+	runqput(_g_.m.p.ptr(), gp, next) //把gp放入当前M所在的p的本地队列里（该队列里的g都是runnable态）
 	wakep()                          //尝试调度空闲的p来执行gp
 	releasem(mp)                     //
 }
@@ -1301,9 +1300,9 @@ func stopTheWorldWithSema() {
 func startTheWorldWithSema(emitTraceEvent bool) int64 {
 	assertWorldStopped()
 
-	mp := acquirem() // disable preemption because it can be holding p in a local var
-	if netpollinited() {
-		list := netpoll(0) // non-blocking
+	mp := acquirem()     // disable preemption because it can be holding p in a local var
+	if netpollinited() { //如果netpoll已初始化了，则尝试下看看有无就绪的IO事件
+		list := netpoll(0) // 在startTheWorld时就先尝试看有无IO事件就绪。非阻塞，当IO未就绪时立即返回，此时list是空的
 		injectglist(&list)
 	}
 	lock(&sched.lock)
@@ -2302,7 +2301,6 @@ func templateThread() {
 // Stops execution of the current m until new work is available.
 // Returns with acquired P.
 // 停止当前g的m的运行，直到有新的任务
-// 返回获取到的p
 func stopm() {
 	_g_ := getg() //g0或g
 
@@ -2562,15 +2560,15 @@ func startlockedm(gp *g) {
 
 // Stops the current m for stopTheWorld.
 // Returns when the world is restarted.
-// 因 stopTheWorld 暂停m，当stw恢复时才返回
+// 因 stopTheWorld 先暂停当前m，当stw恢复时才返回
 func gcstopm() {
 	_g_ := getg()
 
-	if sched.gcwaiting == 0 {
+	if sched.gcwaiting == 0 { //调用本函数时，必须是当前有gc等待执行
 		throw("gcstopm: not waiting for gc")
 	}
 	if _g_.m.spinning {
-		_g_.m.spinning = false
+		_g_.m.spinning = false //先暂停m的自旋
 		// OK to just drop nmspinning here,
 		// startTheWorld will unpark threads as necessary.
 		if int32(atomic.Xadd(&sched.nmspinning, -1)) < 0 {
@@ -2638,6 +2636,7 @@ func execute(gp *g, inheritTime bool) {
 
 // Finds a runnable goroutine to execute.
 // Tries to steal from other P's, get g from local or global queue, poll network.
+// 寻找一个runnable的G来执行，尝试从其他P的队列里偷取，或者从全局队列里偷取，或者从poll network里偷取
 func findrunnable() (gp *g, inheritTime bool) {
 	_g_ := getg() //某个m的g0
 
@@ -2690,10 +2689,10 @@ top:
 	// blocked thread (e.g. it has already returned from netpoll, but does
 	// not set lastpoll yet), this thread will do blocking netpoll below
 	// anyway.
-	// 尝试从网络阻塞里获取
-	// 在从其他p偷取g时，先尝试在网络阻塞上获取g，若没g或线程阻塞在网络访问上，则跳过此步骤
+	// 尝试从网络poll里获取
+	// 在从其他p偷取g前，先尝试在网络阻塞上获取g，若没g或线程阻塞在网络访问上，则跳过此步骤
 	if netpollinited() && atomic.Load(&netpollWaiters) > 0 && atomic.Load64(&sched.lastpoll) != 0 {
-		if list := netpoll(0); !list.empty() { // 非阻塞调用，non-blocking
+		if list := netpoll(0); !list.empty() { // 在findrunnable里调用，说明此时某个P已经干完活了，要继续找活干。delay=0非阻塞调用
 			gp := list.pop()
 			injectglist(&list)
 			casgstatus(gp, _Gwaiting, _Grunnable)
@@ -2734,13 +2733,8 @@ top:
 		}
 	}
 
-	// We have nothing to do.
-	//
-	// If we're in the GC mark phase, can safely scan and blacken objects,
-	// and have work to do, run idle-time marking rather than give up the
-	// P.
-	// 没有g可用
-	// 如果当前正处于GC标记阶段，则可以安全地运行扫描和标黑对象，这样m就有工作可做了，总比放弃p不干活好
+	// 没有g要执行了
+	// 如果当前正处于GC标记阶段，则可以安全地进行扫描标记和对象标黑，在P空闲时执行标记工作比空闲不干活好
 	if gcBlackenEnabled != 0 && gcMarkWorkAvailable(_p_) {
 		//返回等待执行gc的g
 		node := (*gcBgMarkWorkerNode)(gcBgMarkWorkerPool.pop())
@@ -2888,7 +2882,7 @@ top:
 			// When using fake time, just poll.
 			delay = 0
 		}
-		list := netpoll(delay) // block until new work is available
+		list := netpoll(delay) // 也是在findrunnable()调用，但是本次是只阻塞等待delay
 		atomic.Store64(&sched.pollUntil, 0)
 		atomic.Store64(&sched.lastpoll, uint64(nanotime()))
 		if faketime != 0 && list.empty() {
@@ -2933,18 +2927,23 @@ top:
 // be doing. This is a fairly lightweight check to be used for
 // background work loops, like idle GC. It checks a subset of the
 // conditions checked by the actual scheduler.
-// 检查当前p的队列是否为空，是则去找些g给它处理（不能让p闲下来）
+// pollWork 轻量级检查函数，当P已无G要执行时，则调用本函数来检查下是否还有检查当前P的队列是否为空，是则去找些G给它处理（不能让P闲下来）
+// 目前本函数只在g0栈里被调用
+// 返回true则表示本协程当前的P还有G要执行，返回false表示P已空闲
 func pollWork() bool {
 	if sched.runqsize != 0 { //全局runnable的队列不为空
 		return true
 	}
-	p := getg().m.p.ptr() //本g所在的p
+	p := getg().m.p.ptr() //本G所在的P
 	if !runqempty(p) {
 		//当前p的本地队列不为空，则不需要去查询网络IO了（因为本地队列的g还未处理完）
 		return true
-	}
+	} //当p还有G要执行时，则这里返回，true
+
+	// 有使用netpoll 且 当前有G在等待netpoll的事件 且 当前未在polling
+	// 那么就进行一次polling（delay=0，不阻塞，如果当前还没时间就绪就立即返回），查看是否有事件就绪
 	if netpollinited() && atomic.Load(&netpollWaiters) > 0 && sched.lastpoll != 0 {
-		if list := netpoll(0); !list.empty() { //轮询是否有网络IO就绪
+		if list := netpoll(0); !list.empty() { //pollWork()里调用，轮询是否有网络IO就绪，非阻塞调用
 			injectglist(&list) //有就绪，则把等待在其上面的G放入到全局或P的队列里等待执行
 			return true
 		}
@@ -4219,7 +4218,7 @@ func malg(stacksize int32) *g {
 //
 func newproc(fn *funcval) {
 	gp := getg()
-	pc := getcallerpc() //返回 调用go关键字的函数 的pc（该函数当前执行到哪些指令）
+	pc := getcallerpc()  //返回 调用go关键字的函数 的pc（该函数当前执行到哪些指令）
 	systemstack(func() { //切换到g0执行下列逻辑
 		newg := newproc1(fn, gp, pc) //申请一个新g
 

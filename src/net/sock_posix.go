@@ -16,7 +16,7 @@ import (
 // socket returns a network file descriptor that is ready for
 // asynchronous I/O using the network poller.
 func socket(ctx context.Context, net string, family, sotype, proto int, ipv6only bool, laddr, raddr sockaddr, ctrlFn func(string, string, syscall.RawConn) error) (fd *netFD, err error) {
-	s, err := sysSocket(family, sotype, proto)
+	s, err := sysSocket(family, sotype, proto) //创建（系统）fd
 	if err != nil {
 		return nil, err
 	}
@@ -190,12 +190,15 @@ func (fd *netFD) listenStream(laddr sockaddr, backlog int, ctrlFn func(string, s
 			return err
 		}
 	}
+	//系统调用bind()
 	if err = syscall.Bind(fd.pfd.Sysfd, lsa); err != nil {
 		return os.NewSyscallError("bind", err)
 	}
+	//系统调用listen()
 	if err = listenFunc(fd.pfd.Sysfd, backlog); err != nil {
 		return os.NewSyscallError("listen", err)
 	}
+	//再把该fd加入epoll监听
 	if err = fd.init(); err != nil {
 		return err
 	}

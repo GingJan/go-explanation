@@ -235,7 +235,7 @@ func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
 	pd.fd = fd //对fd进行封装
 	pd.closing = false
 	pd.setEventErr(false)
-	pd.rseq++
+	pd.rseq++ //每次添加一个fd到epoll里监听，就+1
 	pd.rg.Store(0)
 	pd.rd = 0
 	pd.wseq++
@@ -336,7 +336,7 @@ func poll_runtime_pollWaitCanceled(pd *pollDesc, mode int) {
 //go:linkname poll_runtime_pollSetDeadline internal/poll.runtime_pollSetDeadline
 func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
 	lock(&pd.lock)
-	if pd.closing {
+	if pd.closing { //如果pd关闭了，则返回
 		unlock(&pd.lock)
 		return
 	}
@@ -408,14 +408,14 @@ func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
 	}
 	unlock(&pd.lock)
 	if rg != nil {
-		netpollgoready(rg, 3)
+		netpollgoready(rg, 3) //poll_runtime_pollSetDeadline调用
 	}
 	if wg != nil {
-		netpollgoready(wg, 3)
+		netpollgoready(wg, 3) //poll_runtime_pollSetDeadline调用
 	}
 }
 
-//解除底层fd的读写事件阻塞
+//解除阻塞在底层fd读写事件的G的阻塞
 //go:linkname poll_runtime_pollUnblock internal/poll.runtime_pollUnblock
 func poll_runtime_pollUnblock(pd *pollDesc) {
 	lock(&pd.lock) //上锁
@@ -439,10 +439,10 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 	}
 	unlock(&pd.lock)
 	if rg != nil {
-		netpollgoready(rg, 3) //把被阻塞的g唤醒进入runnable态
+		netpollgoready(rg, 3) //poll_runtime_pollUnblock调用，把被阻塞的g唤醒进入runnable态
 	}
 	if wg != nil {
-		netpollgoready(wg, 3) //把被阻塞的g唤醒进入runnable态
+		netpollgoready(wg, 3) //poll_runtime_pollUnblock调用，把被阻塞的g唤醒进入runnable态
 	}
 }
 
@@ -454,6 +454,8 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 //
 // This may run while the world is stopped, so write barriers are not allowed.
 //go:nowritebarrier
+// netpollready函数被对应系统平台（如Linux）的 netpoll 函数调用
+// 实现的行为是把pd下关联的G解除阻塞等待，并把该G写入到toRun里
 func netpollready(toRun *gList, pd *pollDesc, mode int32) {
 	var rg, wg *g
 	if mode == 'r' || mode == 'r'+'w' {
@@ -564,7 +566,7 @@ func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 	return old == pdReady
 }
 
-//解除在io上等待的G的阻塞，并返回该G
+//解除pd下等待IO的G的阻塞（pd->IO->G三者关联），并返回该G
 func netpollunblock(pd *pollDesc, mode int32, ioready bool) *g {
 	gpp := &pd.rg
 	if mode == 'w' {
@@ -614,7 +616,7 @@ func netpolldeadlineimpl(pd *pollDesc, seq uintptr, read, write bool) {
 		}
 		pd.rd = -1 //置为已超时
 		pd.publishInfo()
-		rg = netpollunblock(pd, 'r', false) //解除阻塞在该pd上等待读的G
+		rg = netpollunblock(pd, 'r', false) //解除阻塞在该pd上等待读的G，并返回该G
 	}
 	var wg *g
 	if write {
@@ -623,14 +625,14 @@ func netpolldeadlineimpl(pd *pollDesc, seq uintptr, read, write bool) {
 		}
 		pd.wd = -1 //置为已超时
 		pd.publishInfo()
-		wg = netpollunblock(pd, 'w', false) //解除阻塞在该pd上等待写的G
+		wg = netpollunblock(pd, 'w', false) //解除阻塞在该pd上等待写的G，并返回该G
 	}
 	unlock(&pd.lock)
 	if rg != nil {
-		netpollgoready(rg, 0) //把该G设为runnable等待调度器调度执行
+		netpollgoready(rg, 0) //netpolldeadlineimpl调用，把该G设为runnable等待调度器调度执行
 	}
 	if wg != nil {
-		netpollgoready(wg, 0) //把该G设为runnable等待调度器调度执行
+		netpollgoready(wg, 0) //netpolldeadlineimpl调用，把该G设为runnable等待调度器调度执行
 	}
 }
 
@@ -676,6 +678,8 @@ func (c *pollCache) alloc() *pollDesc {
 // a conversion requires an allocation because pointers to
 // go:notinheap types (which pollDesc is) must be stored
 // in interfaces indirectly. See issue 42076.
+// makeArg 本方法把pd转为一个interface{}类型
+// makeArg 不做任何内存分配，
 func (pd *pollDesc) makeArg() (i any) {
 	x := (*eface)(unsafe.Pointer(&i))
 	x._type = pdType

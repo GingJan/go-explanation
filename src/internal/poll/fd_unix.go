@@ -28,18 +28,18 @@ type FD struct {
 	pd pollDesc //是 poll.pollDesc，poll.pollDesc 的 runtimeCtx 指向 runtime.pollDesc，runtime.pollDesc 再指向更底层的fd
 
 	// Writev cache.
+	// 用于Writev的缓冲空间
 	iovecs *[]syscall.Iovec
 
-	// Semaphore signaled when file is closed.
-	csema uint32 //当文件被关闭时，使用该信号量进行通知
+	//当文件被关闭时，使用该信号量进行通知
+	csema uint32
 
-	// Non-zero if this file has been set to blocking mode.
 	// 标记该FD实例是否阻塞模式。如果FD被设为阻塞模式，则该值为非0（即1）
 	isBlocking uint32
 
 	// Whether this is a streaming descriptor, as opposed to a
 	// packet-based descriptor like a UDP socket. Immutable.
-	// 流描述符标识，true则为流描述符，false则为类似UDP包的包描述符（也即true则是TCP、false则是UDP）
+	// 流fd标志，true则为流fd（如TCP），false则为包fd（如UDP包），也即true则是TCP、false则是UDP
 	IsStream bool
 
 	// Whether a zero byte read indicates EOF. This is false for a

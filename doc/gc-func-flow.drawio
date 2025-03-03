@@ -1,0 +1,167 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/26.0.4 Chrome/128.0.6613.186 Electron/32.2.5 Safari/537.36" version="26.0.4">
+  <diagram name="第 1 页" id="TXOZCGNWDKKGHUX-65iK">
+    <mxGraphModel dx="2449" dy="2407" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="8Mk51fn69V4XJINsnEcT-3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-1" target="8Mk51fn69V4XJINsnEcT-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-1" value="runtime.gcMarkDone()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="747.5" y="210" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-24" value="debug" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-2" target="8Mk51fn69V4XJINsnEcT-22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-26" value="gcphase = _GCoff" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-2" target="8Mk51fn69V4XJINsnEcT-25">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-30" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-2" target="8Mk51fn69V4XJINsnEcT-29">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-2" value="runtime.gcMarkTermination(nextTriggerRatio float64)&lt;div&gt;gcphase =&amp;nbsp;_GCmarktermination&lt;br&gt;&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="686.25" y="445" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-5" value="2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;textShadow=0;verticalAlign=middle;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-4" target="8Mk51fn69V4XJINsnEcT-1">
+          <mxGeometry x="0.0019" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-23" value="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;verticalAlign=middle;horizontal=1;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-4" target="8Mk51fn69V4XJINsnEcT-22">
+          <mxGeometry x="0.0118" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-4" value="gcBgMarkWorker()&lt;div&gt;进行标记工作&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="210" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-7" value="Goroutine, num=GOMAXPROC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-6" target="8Mk51fn69V4XJINsnEcT-4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-6" value="gcBgMarkStartWorkers()&lt;div&gt;创建gc worker协程&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="40" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-8" target="8Mk51fn69V4XJINsnEcT-6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-8" value="gcStart(trigger gcTrigger)&lt;div&gt;gcphase =&amp;nbsp;_GCmark&lt;br&gt;&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="-130" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-10" target="8Mk51fn69V4XJINsnEcT-1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-10" value="runtime.gcAssistAlloc(gp *g)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="747.5" y="40" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-16" value="2" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;jumpStyle=arc;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-14" target="8Mk51fn69V4XJINsnEcT-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-21" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-14" target="8Mk51fn69V4XJINsnEcT-10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-45" value="1" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-14" target="8Mk51fn69V4XJINsnEcT-42">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-14" value="runtime.mallocgc(size uintptr, typ *_type, needzero bool)&lt;div&gt;内存使用率触发&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="312.5" y="-880" width="325" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-20" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;jumpStyle=arc;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-17" target="8Mk51fn69V4XJINsnEcT-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-17" value="runtime.GC()&lt;div&gt;主动触发&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="128.75" y="-350" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-19" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;jumpStyle=arc;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-18" target="8Mk51fn69V4XJINsnEcT-8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-18" value="runtime.forcegchelper()&lt;div&gt;定时触发&lt;br&gt;&lt;/div&gt;" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="447.5" y="-350" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-32" value="2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-22" target="8Mk51fn69V4XJINsnEcT-31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-37" value="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-22" target="8Mk51fn69V4XJINsnEcT-35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-22" value="runtime.gcDrain(gcw *gcWork, flags gcDrainFlags)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="128.75" y="445" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-28" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-25" target="8Mk51fn69V4XJINsnEcT-27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-25" value="runtime.gcSweep(mode gcMode)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="686.25" y="575" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-27" value="runtime.sweepone()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="686.25" y="715" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-29" value="runtime.gcMark(startTime int64)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="1078.75" y="445" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-53" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-31" target="8Mk51fn69V4XJINsnEcT-52">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-31" value="runtime.scanobject(b uintptr, gcw *gcWork)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="128.75" y="635" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-33" target="8Mk51fn69V4XJINsnEcT-31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-33" value="runtime.markrootSpans(gcw *gcWork, shard int)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-610" y="635" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-36" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-35" target="8Mk51fn69V4XJINsnEcT-33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-56" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;jumpStyle=arc;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-35" target="8Mk51fn69V4XJINsnEcT-54">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-35" value="runtime.markroot(gcw *gcWork, i uint32, flushBgCredit bool)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-610" y="445" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-39" value="1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-38" target="8Mk51fn69V4XJINsnEcT-35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-47" value="2" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;jumpStyle=arc;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-38" target="8Mk51fn69V4XJINsnEcT-31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-38" value="runtime.gcDrainN(gcw *gcWork, scanWork int64)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-610" y="210" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-41" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-40" target="8Mk51fn69V4XJINsnEcT-38">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-40" value="runtime.gcAssistAlloc1(gp *g, scanWork int64)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-610" y="70" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-44" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-42" target="8Mk51fn69V4XJINsnEcT-40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-42" value="runtime.gcAssistAlloc(gp *g)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-610" y="-70" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-49" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;jumpStyle=arc;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-48" target="8Mk51fn69V4XJINsnEcT-31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-48" value="runtime.addfinalizer(p unsafe.Pointer, f *funcval, nret uintptr, fint *_type, ot *ptrtype)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-230" y="740" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-51" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-50" target="8Mk51fn69V4XJINsnEcT-48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-50" value="runtime.SetFinalizer(obj any, finalizer any)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="-230" y="880" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-52" value="runtime.greyobject(obj, base, off uintptr, span *mspan, gcw *gcWork, objIndex uintptr)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="128.75" y="775" width="312.5" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-55" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="8Mk51fn69V4XJINsnEcT-54" target="8Mk51fn69V4XJINsnEcT-52">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="8Mk51fn69V4XJINsnEcT-54" value="runtime.scanblock()" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="470" y="585" width="176" height="60" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

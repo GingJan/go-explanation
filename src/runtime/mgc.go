@@ -203,6 +203,7 @@ var writeBarrier struct {
 var gcBlackenEnabled uint32
 
 const (
+	//gc阶段
 	_GCoff             = iota // GC not running; sweeping in background, write barrier disabled
 	_GCmark                   // GC marking roots and workbufs: allocate black, write barrier ENABLED
 	_GCmarktermination        // GC mark termination: allocate black, P's help GC, write barrier ENABLED
@@ -312,8 +313,8 @@ var work struct {
 	// (and thus 8-byte alignment even on 32-bit architectures).
 	bytesMarked uint64
 
-	markrootNext uint32 // next markroot job
-	markrootJobs uint32 // number of markroot jobs
+	markrootNext uint32 // 下一个markroot job
+	markrootJobs uint32 // markroot jobs的数量
 
 	nproc  uint32
 	tstart int64
@@ -439,7 +440,7 @@ func GC() {
 	// We're now in sweep N or later. Trigger GC cycle N+1, which
 	// will first finish sweep N if necessary and then enter sweep
 	// termination N+1.
-	gcStart(gcTrigger{kind: gcTriggerCycle, n: n + 1})
+	gcStart(gcTrigger{kind: gcTriggerCycle, n: n + 1}) //手动触发gc
 
 	// Wait for mark termination N+1 to complete.
 	gcWaitOnMark(n + 1)
@@ -504,12 +505,14 @@ func gcWaitOnMark(n uint32) {
 }
 
 // gcMode indicates how concurrent a GC cycle should be.
+// gcMode 进行gc的模式
 type gcMode int
 
 const (
-	gcBackgroundMode gcMode = iota // concurrent GC and sweep
-	gcForceMode                    // stop-the-world GC now, concurrent sweep
-	gcForceBlockMode               // stop-the-world GC now and STW sweep (forced by user)
+	//进行gc的模式
+	gcBackgroundMode gcMode = iota // （默认）后台并发模式，也即和用户协程同时并发执行，concurrent GC and sweep
+	gcForceMode                    // stw模式1，只在标记时stw，在清理时并发执行 stop-the-world GC now, concurrent sweep
+	gcForceBlockMode               // stw模式2，标记和清理都stw，stop-the-world GC now and STW sweep (forced by user)
 )
 
 // A gcTrigger is a predicate for starting a GC cycle. Specifically,
@@ -520,28 +523,33 @@ type gcTrigger struct {
 	n    uint32 // gcTriggerCycle: cycle number to start
 }
 
+// gc被触发的原因
 type gcTriggerKind int
 
 const (
 	// gcTriggerHeap indicates that a cycle should be started when
 	// the heap size reaches the trigger heap size computed by the
 	// controller.
+	// 因堆所用空间达到触发值
 	gcTriggerHeap gcTriggerKind = iota
 
 	// gcTriggerTime indicates that a cycle should be started when
 	// it's been more than forcegcperiod nanoseconds since the
 	// previous GC cycle.
+	// 因距离最近一次GC已间隔forcegcperiod纳秒
 	gcTriggerTime
 
 	// gcTriggerCycle indicates that a cycle should be started if
 	// we have not yet started cycle number gcTrigger.n (relative
 	// to work.cycles).
+	// 手动触发
 	gcTriggerCycle
 )
 
 // test reports whether the trigger condition is satisfied, meaning
 // that the exit condition for the _GCoff phase has been met. The exit
 // condition should be tested when allocating.
+// 检查是否满足垃圾收集条件
 func (t gcTrigger) test() bool {
 	if !memstats.enablegc || panicking != 0 || gcphase != _GCoff {
 		return false
@@ -595,7 +603,7 @@ func gcStart(trigger gcTrigger) {
 	//
 	// We check the transition condition continuously here in case
 	// this G gets delayed in to the next GC cycle.
-	for trigger.test() && sweepone() != ^uintptr(0) {
+	for trigger.test() && sweepone() != ^uintptr(0) { // 检查是否满足垃圾收集条件 并且 清理已经被标记的内存单元（完成上一个垃圾收集循环的收尾工作）
 		sweep.nbgsweep++
 	}
 
@@ -603,12 +611,13 @@ func gcStart(trigger gcTrigger) {
 	// transition.
 	semacquire(&work.startSema)
 	// Re-check transition condition under transition lock.
-	if !trigger.test() {
+	if !trigger.test() { // 再次检查是否满足垃圾收集条件
 		semrelease(&work.startSema)
 		return
 	}
 
 	// For stats, check if this GC was forced by the user.
+	// 是否由用户主动发起的GC
 	work.userForced = trigger.kind == gcTriggerCycle
 
 	// In gcstoptheworld debug mode, upgrade the mode accordingly.
@@ -638,7 +647,7 @@ func gcStart(trigger gcTrigger) {
 		}
 	}
 
-	gcBgMarkStartWorkers()
+	gcBgMarkStartWorkers() //创建gcBgMarkWorker
 
 	systemstack(gcResetMarkState)
 
@@ -1121,6 +1130,7 @@ func gcMarkTermination(nextTriggerRatio float64) {
 // goroutines will not run until the mark phase, but they must be started while
 // the work is not stopped and from a regular G stack. The caller must hold
 // worldsema.
+// 本函数用于创建 后台GC标记 的工作G，这些G会等待到GC标记阶段才执行。这些G创建后，进入等待态，直到调度器调起
 func gcBgMarkStartWorkers() {
 	// Background marking is performed by per-P G's. Ensure that each P has
 	// a background GC G.
@@ -1128,7 +1138,7 @@ func gcBgMarkStartWorkers() {
 	// Worker Gs don't exit if gomaxprocs is reduced. If it is raised
 	// again, we can reuse the old workers; no need to create new workers.
 	for gcBgMarkWorkerCount < gomaxprocs {
-		go gcBgMarkWorker()
+		go gcBgMarkWorker() //创建gcBgMarkWorker
 
 		notetsleepg(&work.bgMarkReady, -1)
 		noteclear(&work.bgMarkReady)
@@ -1337,7 +1347,7 @@ func gcBgMarkWorker() {
 // gcMarkWorkAvailable reports whether executing a mark worker
 // on p is potentially useful. p may be nil, in which case it only
 // checks the global sources of work.
-// 是否可以在p上执行标记工作
+// 是否可以在p上执行GC的标记工作
 func gcMarkWorkAvailable(p *p) bool {
 	if p != nil && !p.gcw.empty() {
 		return true
@@ -1347,13 +1357,14 @@ func gcMarkWorkAvailable(p *p) bool {
 	}
 	if work.markrootNext < work.markrootJobs {
 		return true // root scan work available
-	}
+	} //表示还有markroot的job要处理
 	return false
 }
 
 // gcMark runs the mark (or, for concurrent GC, mark termination)
 // All gcWork caches must be empty.
 // STW is in effect at this point.
+// 本函数执行标记逻辑
 func gcMark(startTime int64) {
 	if debug.allocfreetrace > 0 {
 		tracegc()
@@ -1470,7 +1481,7 @@ func gcSweep(mode gcMode) {
 
 	sweep.centralIndex.clear()
 
-	if !_ConcurrentSweep || mode == gcForceBlockMode {
+	if !_ConcurrentSweep || mode == gcForceBlockMode { // 如果是全阻塞GC模式
 		// Special case synchronous sweep.
 		// Record that no proportional sweeping has to happen.
 		lock(&mheap_.lock)

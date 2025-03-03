@@ -158,7 +158,9 @@ var oneptrmask = [...]uint8{1}
 // to the background credit pool.
 //
 // nowritebarrier is only advisory here.
-//
+// markroot 扫描第i个根对象
+// 抢占必须得先禁用，因为本函数使用gcWork
+// 返回本操作产生的 GC work 积分数量，如果 flushBgCredit 为true，那么本操作产生的积分也会被刷到后台积分池background credit pool
 //go:nowritebarrier
 func markroot(gcw *gcWork, i uint32, flushBgCredit bool) int64 {
 	// Note: if you add a case here, please also update heapdump.go:dumproots.
@@ -1011,12 +1013,14 @@ const (
 // gcDrain will always return if there is a pending STW.
 //
 //go:nowritebarrier
+// 本函数在g0栈执行，负责从gcw任务池中取出一个任务并执行
+// 参数 flags 是用于控制垃圾回收工作队列中任务的行为
 func gcDrain(gcw *gcWork, flags gcDrainFlags) {
 	if !writeBarrier.needed {
 		throw("gcDrain phase incorrect")
 	}
 
-	gp := getg().m.curg
+	gp := getg().m.curg //gp是用户协程
 	preemptible := flags&gcDrainUntilPreempt != 0
 	flushBgCredit := flags&gcDrainFlushBgCredit != 0
 	idle := flags&gcDrainIdle != 0
@@ -1030,7 +1034,7 @@ func gcDrain(gcw *gcWork, flags gcDrainFlags) {
 	if flags&(gcDrainIdle|gcDrainFractional) != 0 {
 		checkWork = initScanWork + drainCheckThreshold
 		if idle {
-			check = pollWork
+			check = pollWork // pollWork返回false，表示P已空闲，可以用来做一些后台工作，比如GC
 		} else if flags&gcDrainFractional != 0 {
 			check = pollFractionalWorkerExit
 		}
@@ -1044,7 +1048,7 @@ func gcDrain(gcw *gcWork, flags gcDrainFlags) {
 			if job >= work.markrootJobs {
 				break
 			}
-			markroot(gcw, job, flushBgCredit)
+			markroot(gcw, job, flushBgCredit) //对根对象进行标记
 			if check != nil && check() {
 				goto done
 			}

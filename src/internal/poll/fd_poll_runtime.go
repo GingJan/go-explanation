@@ -18,14 +18,14 @@ import (
 //go:linkname runtimeNano runtime.nanotime
 func runtimeNano() int64
 
-func runtime_pollServerInit()                            //相当于epoll_create()，初始化/创建epoll实例
-func runtime_pollOpen(fd uintptr) (uintptr, int)         //相当于epoll_add(ADD)
-func runtime_pollClose(ctx uintptr)                      //相当于epoll_add(DEL)，把pd指向的底层fd从epoll的监听队列移除
-func runtime_pollWait(ctx uintptr, mode int) int         //相当于epoll_wait，对应底层的 runtime.poll_runtime_pollWait 函数
-func runtime_pollWaitCanceled(ctx uintptr, mode int) int //本函数只用于windows系统。指向 runtime.poll_runtime_pollWaitCanceled，调用本函数，返回bool或阻塞等待IO
-func runtime_pollReset(ctx uintptr, mode int) int        //重置runtime.pollDesc，以便后续复用。指向 runtime.poll_runtime_pollReset
-func runtime_pollSetDeadline(ctx uintptr, d int64, mode int)
-func runtime_pollUnblock(ctx uintptr) //解除在该fd上等待事件的所有G的阻塞，指向 runtime.poll_runtime_pollUnblock
+func runtime_pollServerInit()                                //相当于epoll_create()，初始化/创建epoll实例
+func runtime_pollOpen(fd uintptr) (uintptr, int)             //相当于epoll_add(ADD)
+func runtime_pollClose(ctx uintptr)                          //相当于epoll_add(DEL)，把pd指向的底层fd从epoll的监听队列移除
+func runtime_pollWait(ctx uintptr, mode int) int             //相当于epoll_wait，对应底层的 runtime.poll_runtime_pollWait 函数
+func runtime_pollWaitCanceled(ctx uintptr, mode int) int     //本函数只用于windows系统。指向 runtime.poll_runtime_pollWaitCanceled，调用本函数，返回bool或阻塞等待IO
+func runtime_pollReset(ctx uintptr, mode int) int            //重置runtime.pollDesc，以便后续复用。指向 runtime.poll_runtime_pollReset
+func runtime_pollSetDeadline(ctx uintptr, d int64, mode int) //指向 runtime.poll_runtime_pollSetDeadline
+func runtime_pollUnblock(ctx uintptr)                        //解除在该fd上等待事件的所有G的阻塞，指向 runtime.poll_runtime_pollUnblock
 func runtime_isPollServerDescriptor(fd uintptr) bool
 
 //是底层系统fd的封装，负责fd和epoll的交互

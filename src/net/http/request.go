@@ -133,7 +133,7 @@ type Request struct {
 	// Header contains the request header fields either received
 	// by the server or to be sent by the client.
 	//
-	// If a server received a request with header lines,
+	// 如果服务器收到了一个带有如下请求头的请求
 	//
 	//	Host: example.com
 	//	accept-encoding: gzip, deflate
@@ -141,7 +141,7 @@ type Request struct {
 	//	fOO: Bar
 	//	foo: two
 	//
-	// then
+	// 那么将被解析为
 	//
 	//	Header = map[string][]string{
 	//		"Accept-Encoding": {"gzip, deflate"},
@@ -149,18 +149,14 @@ type Request struct {
 	//		"Foo": {"Bar", "two"},
 	//	}
 	//
-	// For incoming requests, the Host header is promoted to the
-	// Request.Host field and removed from the Header map.
+	// 对于收到的请求，请求头的Host字段会被映射到
+	// Request.Host 字段并且从 Request.Header map里移除.
 	//
-	// HTTP defines that header names are case-insensitive. The
-	// request parser implements this by using CanonicalHeaderKey,
-	// making the first character and any characters following a
-	// hyphen uppercase and the rest lowercase.
+	// HTTP协议定义了请求头的名字是大小写不敏感的，请求解析器通过使用 CanonicalHeaderKey 函数实现,
+	// 将第一个字符以及任何连字符（-）后面的字符转换为大写，其余字符转换为小写。
 	//
-	// For client requests, certain headers such as Content-Length
-	// and Connection are automatically written when needed and
-	// values in Header may be ignored. See the documentation
-	// for the Request.Write method.
+	// 若用于客户端将要发出的请求，Content-Length 和 Connection 等头会自动识别并写入，而这些头在 Header 字段里的值
+	// 将被忽略，详情请看 Request.Write 的文档
 	Header Header
 
 	// Body is the request's body.
@@ -318,11 +314,12 @@ type Request struct {
 	// be modified via copying the whole Request using WithContext.
 	// It is unexported to prevent people from using Context wrong
 	// and mutating the contexts held by callers of the same request.
+	// ctx是客户端或服务端的上下文，只能通过调用 Request.WithContext 方法复制整个 Request 的方式
+	// 来实现对ctx的修改，该ctx不可导出，以防调用方错误的使用该ctx，（因为同一个请求可能还被其他调用方持有，导致修改了其他调用方里存有的ctx）
 	ctx context.Context
 }
 
-// Context returns the request's context. To change the context, use
-// WithContext.
+// Context 返回请求的上下文，要改变该ctx，使用 Request.WithContext
 //
 // The returned context is always non-nil; it defaults to the
 // background context.
@@ -339,17 +336,14 @@ func (r *Request) Context() context.Context {
 	return context.Background()
 }
 
-// WithContext returns a shallow copy of r with its context changed
-// to ctx. The provided ctx must be non-nil.
+// WithContext 返回一个r的副本，但是该副本的ctx被替换成形参ctx，传入的ctx不可为nil
 //
-// For outgoing client request, the context controls the entire
-// lifetime of a request and its response: obtaining a connection,
-// sending the request, and reading the response headers and body.
+// 对于发出的客户端请求而言，ctx上下文控制着请求和响应的整个生命周期：获取连接
+// 发送请求，还有读取响应头和响应体
 //
-// To create a new request with a context, use NewRequestWithContext.
-// To change the context of a request, such as an incoming request you
-// want to modify before sending back out, use Request.Clone. Between
-// those two uses, it's rare to need WithContext.
+// 要用ctx创建新的请求，使用 NewRequestWithContext 函数.
+// 要改变请求的上下文，例如你想在接收到请求后，先对其进行修改再往下传递，那么应使用 Request.Clone 方法
+// 以上两种场景不建议使用本方法
 func (r *Request) WithContext(ctx context.Context) *Request {
 	if ctx == nil {
 		panic("nil context")
@@ -361,8 +355,7 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 	return r2
 }
 
-// Clone returns a deep copy of r with its context changed to ctx.
-// The provided ctx must be non-nil.
+// Clone 返回一个r的深层拷贝副本，该副本的ctx改为传入的ctx（注意传入的ctx不可为nil）
 //
 // For an outgoing client request, the context controls the entire
 // lifetime of a request and its response: obtaining a connection,
@@ -375,6 +368,8 @@ func (r *Request) Clone(ctx context.Context) *Request {
 	*r2 = *r
 	r2.ctx = ctx
 	r2.URL = cloneURL(r.URL)
+
+	//以下内容在 Request.WithContext 是没有的
 	if r.Header != nil {
 		r2.Header = r.Header.Clone()
 	}
@@ -511,6 +506,7 @@ const defaultUserAgent = "Go-http-client/1.1"
 
 // Write 以文本明文的形式写入一个 HTTP/1.1 请求, 也即是header和body
 // This method consults the following fields of the request:
+//
 //	Host
 //	URL
 //	Method (defaults to "GET")
@@ -734,9 +730,11 @@ func idnaASCII(v string) (string, error) {
 // into Punycode form, if necessary.
 //
 // Ideally we'd clean the Host header according to the spec:
-//   https://tools.ietf.org/html/rfc7230#section-5.4 (Host = uri-host [ ":" port ]")
-//   https://tools.ietf.org/html/rfc7230#section-2.7 (uri-host -> rfc3986's host)
-//   https://tools.ietf.org/html/rfc3986#section-3.2.2 (definition of host)
+//
+//	https://tools.ietf.org/html/rfc7230#section-5.4 (Host = uri-host [ ":" port ]")
+//	https://tools.ietf.org/html/rfc7230#section-2.7 (uri-host -> rfc3986's host)
+//	https://tools.ietf.org/html/rfc3986#section-3.2.2 (definition of host)
+//
 // But practically, what we are trying to avoid is the situation in
 // issue 11206, where a malformed Host header used in the proxy context
 // would create a bad request. So it is enough to just truncate at the

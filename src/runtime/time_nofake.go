@@ -14,6 +14,7 @@ import "unsafe"
 // Zero means not to use faketime.
 var faketime int64
 
+//获取当前系统时间
 //go:nosplit
 func nanotime() int64 {
 	return nanotime1()
