@@ -60,6 +60,7 @@ func cgoLookupHost(ctx context.Context, name string) (hosts []string, err error,
 	return
 }
 
+//使用cgo域名解析器进行service的端口解析
 func cgoLookupPort(ctx context.Context, network, service string) (port int, err error, completed bool) {
 	var hints C.struct_addrinfo
 	switch network {

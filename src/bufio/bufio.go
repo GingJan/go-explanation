@@ -79,7 +79,7 @@ func (b *Reader) Size() int { return len(b.buf) }
 // 在0值 Reader 上调用 Reset 方法可初始化buf缓冲大小为默认大小
 func (b *Reader) Reset(r io.Reader) {
 	if b.buf == nil {
-		b.buf = make([]byte, defaultBufSize)
+		b.buf = make([]byte, defaultBufSize) //4k
 	}
 	b.reset(b.buf, r)
 }
@@ -601,6 +601,7 @@ type Writer struct {
 // NewWriterSize returns a new Writer whose buffer has at least the specified
 // size. If the argument io.Writer is already a Writer with large enough
 // size, it returns the underlying Writer.
+// 新建一个w的封装的实例
 func NewWriterSize(w io.Writer, size int) *Writer {
 	// Is it already a Writer?
 	b, ok := w.(*Writer)

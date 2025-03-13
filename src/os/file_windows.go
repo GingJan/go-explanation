@@ -40,6 +40,7 @@ func (file *File) Fd() uintptr {
 
 // newFile returns a new File with the given file handle and name.
 // Unlike NewFile, it does not check that h is syscall.InvalidHandle.
+// kind：file文件，console控制台，pipi管道
 func newFile(h syscall.Handle, name string, kind string) *File {
 	if kind == "file" {
 		var m uint32

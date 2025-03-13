@@ -235,12 +235,14 @@ type Sockaddr interface {
 	sockaddr() (ptr unsafe.Pointer, len _Socklen, err error) // lowercase; only we can define Sockaddrs
 }
 
+//ipv4结构体
 type SockaddrInet4 struct {
 	Port int
 	Addr [4]byte
 	raw  RawSockaddrInet4
 }
 
+//ipv6结构体
 type SockaddrInet6 struct {
 	Port   int
 	ZoneId uint32
@@ -248,6 +250,7 @@ type SockaddrInet6 struct {
 	raw    RawSockaddrInet6
 }
 
+//unix结构体
 type SockaddrUnix struct {
 	Name string
 	raw  RawSockaddrUnix

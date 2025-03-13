@@ -10,19 +10,23 @@ func (eofReader) Read([]byte) (int, error) {
 	return 0, EOF
 }
 
+//维护多个reader
 type multiReader struct {
 	readers []Reader
 }
 
+//把mr里各reader的数据读取到p里
 func (mr *multiReader) Read(p []byte) (n int, err error) {
 	for len(mr.readers) > 0 {
 		// Optimization to flatten nested multiReaders (Issue 13558).
+		// 把嵌套的multiReaders拍扁
 		if len(mr.readers) == 1 {
 			if r, ok := mr.readers[0].(*multiReader); ok {
 				mr.readers = r.readers
 				continue
 			}
 		}
+
 		n, err = mr.readers[0].Read(p)
 		if err == EOF {
 			// Use eofReader instead of nil to avoid nil panic
@@ -55,6 +59,7 @@ type multiWriter struct {
 	writers []Writer
 }
 
+// 把p里的数据写入到t的各writer里
 func (t *multiWriter) Write(p []byte) (n int, err error) {
 	for _, w := range t.writers {
 		n, err = w.Write(p)

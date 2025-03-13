@@ -109,6 +109,7 @@ func TCPAddrFromAddrPort(addr netip.AddrPort) *TCPAddr {
 
 // TCPConn is an implementation of the Conn interface for TCP network
 // connections.
+// 本结构体实现了 Conn 接口，用于TCP连接
 type TCPConn struct {
 	conn
 }
@@ -148,6 +149,7 @@ func (c *TCPConn) CloseRead() error {
 
 // CloseWrite shuts down the writing side of the TCP connection.
 // Most callers should just use Close.
+// 关闭tcp连接的写入端，大多数情况下应该调用Close函数
 func (c *TCPConn) CloseWrite() error {
 	if !c.ok() {
 		return syscall.EINVAL
@@ -217,9 +219,10 @@ func (c *TCPConn) SetNoDelay(noDelay bool) error {
 	return nil
 }
 
+//创建一个TCPConn实例，fd为底一层的结构
 func newTCPConn(fd *netFD) *TCPConn {
 	c := &TCPConn{conn{fd}}
-	setNoDelay(c.fd, true)//negale算法
+	setNoDelay(c.fd, true) //negale算法
 	return c
 }
 
@@ -249,6 +252,8 @@ func DialTCP(network string, laddr, raddr *TCPAddr) (*TCPConn, error) {
 
 // TCPListener is a TCP network listener. Clients should typically
 // use variables of type Listener instead of assuming TCP.
+// TCP监听器，客户端侧应使用 Listener 类型的变量来存放监听器，而不是本类型
+// 即使用
 type TCPListener struct {
 	fd *netFD
 	lc ListenConfig
@@ -259,6 +264,8 @@ type TCPListener struct {
 //
 // The returned RawConn only supports calling Control. Read and
 // Write return an error.
+// 提供给外部使用，返回一个最底层的网络连接
+// 该方法实现了 syscall.Conn 接口
 func (l *TCPListener) SyscallConn() (syscall.RawConn, error) {
 	if !l.ok() {
 		return nil, syscall.EINVAL
@@ -268,6 +275,7 @@ func (l *TCPListener) SyscallConn() (syscall.RawConn, error) {
 
 // AcceptTCP accepts the next incoming call and returns the new
 // connection.
+// 给外部调用，返回的是TCPConn结构体实例
 func (l *TCPListener) AcceptTCP() (*TCPConn, error) {
 	if !l.ok() {
 		return nil, syscall.EINVAL
@@ -281,6 +289,7 @@ func (l *TCPListener) AcceptTCP() (*TCPConn, error) {
 
 // Accept implements the Accept method in the Listener interface; it
 // waits for the next call and returns a generic Conn.
+// 给外部调用，返回的是Conn接口（更通用）
 func (l *TCPListener) Accept() (Conn, error) {
 	if !l.ok() {
 		return nil, syscall.EINVAL
@@ -348,6 +357,8 @@ func (l *TCPListener) File() (f *os.File, err error) {
 // of the local system.
 // If the Port field of laddr is 0, a port number is automatically
 // chosen.
+// 给外部调用
+// 根据传入的tcp地址信息（laddr） 创建一个专用于tcp的监听器
 func ListenTCP(network string, laddr *TCPAddr) (*TCPListener, error) {
 	switch network {
 	case "tcp", "tcp4", "tcp6":
@@ -355,13 +366,14 @@ func ListenTCP(network string, laddr *TCPAddr) (*TCPListener, error) {
 		return nil, &OpError{Op: "listen", Net: network, Source: nil, Addr: laddr.opAddr(), Err: UnknownNetworkError(network)}
 	}
 	if laddr == nil {
-		laddr = &TCPAddr{}
+		laddr = &TCPAddr{} //默认tcp地址
 	}
 	sl := &sysListener{network: network, address: laddr.String()}
-	ln, err := sl.listenTCP(context.Background(), laddr)
+	ln, err := sl.listenTCP(context.Background(), laddr) //ListenTCP调用，返回一个TCP监听器（注意不是通用监听器）
 	if err != nil {
 		return nil, &OpError{Op: "listen", Net: network, Source: nil, Addr: laddr.opAddr(), Err: err}
 	}
+
 	return ln, nil
 }
 

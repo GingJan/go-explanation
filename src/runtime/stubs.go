@@ -79,7 +79,7 @@ func mcall(fn func(*g))
 // systemstack函数的作用是在系统栈中执行只能由g0(或gsignal)执行的调度代码，
 // 和mcall不同的是，在执行完调度代码后会切回到现在正在执行的代码。
 //go:noescape
-func systemstack(fn func())
+func systemstack(fn func()) //切换到g0在系统栈上执行fn
 
 var badsystemstackMsg = "fatal: systemstack called from unexpected goroutine"
 
@@ -171,6 +171,7 @@ func fastrand() uint32 {
 	return s0 + s1
 }
 
+//获取随机数
 //go:nosplit
 func fastrandn(n uint32) uint32 {
 	// This is similar to fastrand() % n, but faster.

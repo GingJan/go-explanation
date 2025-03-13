@@ -51,7 +51,7 @@ func newFileFD(f *os.File) (*netFD, error) {
 		poll.CloseFunc(s)
 		return nil, syscall.EPROTONOSUPPORT
 	}
-	fd, err := newFD(s, family, sotype, "")
+	fd, err := newFD(s, family, sotype, "") //文件fd
 	if err != nil {
 		poll.CloseFunc(s)
 		return nil, err
@@ -73,7 +73,7 @@ func fileConn(f *os.File) (Conn, error) {
 		return nil, err
 	}
 	switch fd.laddr.(type) {
-	case *TCPAddr:
+	case *TCPAddr: //如果指定的地址是网络地址
 		return newTCPConn(fd), nil
 	case *UDPAddr:
 		return newUDPConn(fd), nil

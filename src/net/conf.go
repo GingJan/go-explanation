@@ -26,7 +26,7 @@ type conf struct {
 	// machine has an /etc/mdns.allow file
 	hasMDNSAllow bool
 
-	goos          string // the runtime.GOOS, to ease testing
+	goos          string // 存放的是 runtime.GOOS 值, to ease testing
 	dnsDebugLevel int
 
 	nss    *nssConf
@@ -309,12 +309,14 @@ func goDebugNetDNS() (dnsMode string, debugLevel int) {
 
 // isLocalhost reports whether h should be considered a "localhost"
 // name for the myhostname NSS module.
+// 域名是否localhost
 func isLocalhost(h string) bool {
 	return stringsEqualFold(h, "localhost") || stringsEqualFold(h, "localhost.localdomain") || stringsHasSuffixFold(h, ".localhost") || stringsHasSuffixFold(h, ".localhost.localdomain")
 }
 
 // isGateway reports whether h should be considered a "gateway"
 // name for the myhostname NSS module.
+// 域名是否网关
 func isGateway(h string) bool {
 	return stringsEqualFold(h, "gateway")
 }

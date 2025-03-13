@@ -114,6 +114,7 @@ var DefaultClient = &Client{}
 //
 // A RoundTripper must be safe for concurrent use by multiple
 // goroutines.
+// http.Client 就是通过 RoundTripper 发送 HTTP 请求的，默认使用 http.Transport 作为 RoundTripper 的实现
 type RoundTripper interface {
 	// RoundTrip executes a single HTTP transaction, returning
 	// a Response for the provided Request.
@@ -201,6 +202,8 @@ func (c *Client) transport() RoundTripper {
 
 // send issues an HTTP request.
 // Caller should close resp.Body when done reading from it.
+// 发出http请求
+// 当从响应体读完数据时，调用方要关闭resp.Body
 func send(ireq *Request, rt RoundTripper, deadline time.Time) (resp *Response, didTimeout func() bool, err error) {
 	req := ireq // req is either the original request, or a modified fork
 
@@ -356,14 +359,14 @@ func setRequestCancel(req *Request, rt RoundTripper, deadline time.Time) (stopTi
 		}
 
 		var cancelCtx func()
-		req.ctx, cancelCtx = context.WithDeadline(oldCtx, deadline)
+		req.ctx, cancelCtx = context.WithDeadline(oldCtx, deadline) //设置了超时ctx
 		return cancelCtx, func() bool { return time.Now().After(deadline) }
 	}
 	initialReqCancel := req.Cancel // the user's original Request.Cancel, if any
 
 	var cancelCtx func()
 	if oldCtx := req.Context(); timeBeforeContextDeadline(deadline, oldCtx) {
-		req.ctx, cancelCtx = context.WithDeadline(oldCtx, deadline)
+		req.ctx, cancelCtx = context.WithDeadline(oldCtx, deadline) //设置超时ctx
 	}
 
 	cancel := make(chan struct{})

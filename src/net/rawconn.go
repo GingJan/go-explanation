@@ -60,6 +60,7 @@ func (c *rawConn) Write(f func(uintptr) bool) error {
 	return err
 }
 
+//返回一个 fd 的封装 rawConn 实例
 func newRawConn(fd *netFD) (*rawConn, error) {
 	return &rawConn{fd: fd}, nil
 }

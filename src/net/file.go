@@ -18,6 +18,7 @@ func (f fileAddr) String() string { return string(f) }
 // the open file f.
 // It is the caller's responsibility to close f when finished.
 // Closing c does not affect f, and closing f does not affect c.
+// 返回fd对应的网络连接实例
 func FileConn(f *os.File) (c Conn, err error) {
 	c, err = fileConn(f)
 	if err != nil {

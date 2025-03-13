@@ -34,5 +34,6 @@ type RawConn interface {
 // access to the underlying file descriptor or handle.
 type Conn interface {
 	// SyscallConn returns a raw network connection.
+	// 返回原生网络请求
 	SyscallConn() (RawConn, error)
 }

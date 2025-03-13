@@ -15,8 +15,10 @@ import (
 
 // socket returns a network file descriptor that is ready for
 // asynchronous I/O using the network poller.
+// 返回一个可用于异步IO（epoll）的网络fd
+// sotype socket类型，有tcp-stream，udp-DGRAM，raw
 func socket(ctx context.Context, net string, family, sotype, proto int, ipv6only bool, laddr, raddr sockaddr, ctrlFn func(string, string, syscall.RawConn) error) (fd *netFD, err error) {
-	s, err := sysSocket(family, sotype, proto) //创建（系统）fd
+	s, err := sysSocket(family, sotype, proto) //创建fd（listen_fd）
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +26,7 @@ func socket(ctx context.Context, net string, family, sotype, proto int, ipv6only
 		poll.CloseFunc(s)
 		return nil, err
 	}
-	if fd, err = newFD(s, family, sotype, net); err != nil {
+	if fd, err = newFD(s, family, sotype, net); err != nil { //fd=netFD 实例，封装了s，s是上面系统创建fd（listen_fd）
 		poll.CloseFunc(s)
 		return nil, err
 	}
@@ -51,15 +53,16 @@ func socket(ctx context.Context, net string, family, sotype, proto int, ipv6only
 	// raddr is nil. Otherwise we assume it's just for dialers or
 	// the other connection holders.
 
+	//server端侧调用本函数时，走的逻辑
 	if laddr != nil && raddr == nil {
 		switch sotype {
-		case syscall.SOCK_STREAM, syscall.SOCK_SEQPACKET:
+		case syscall.SOCK_STREAM, syscall.SOCK_SEQPACKET: //tcp
 			if err := fd.listenStream(laddr, listenerBacklog(), ctrlFn); err != nil {
 				fd.Close()
 				return nil, err
 			}
 			return fd, nil
-		case syscall.SOCK_DGRAM:
+		case syscall.SOCK_DGRAM: //udp
 			if err := fd.listenDatagram(laddr, ctrlFn); err != nil {
 				fd.Close()
 				return nil, err
@@ -67,6 +70,8 @@ func socket(ctx context.Context, net string, family, sotype, proto int, ipv6only
 			return fd, nil
 		}
 	}
+
+	//client端侧调用的本函数时，走这块逻辑，向远程地址发起连接建立请求
 	if err := fd.dial(ctx, laddr, raddr, ctrlFn); err != nil {
 		fd.Close()
 		return nil, err
@@ -113,6 +118,7 @@ func (fd *netFD) addrFunc() func(syscall.Sockaddr) Addr {
 	return func(syscall.Sockaddr) Addr { return nil }
 }
 
+//client端调起的方法，向远程服务发起连接建立请求
 func (fd *netFD) dial(ctx context.Context, laddr, raddr sockaddr, ctrlFn func(string, string, syscall.RawConn) error) error {
 	if ctrlFn != nil {
 		c, err := newRawConn(fd)
@@ -129,17 +135,20 @@ func (fd *netFD) dial(ctx context.Context, laddr, raddr sockaddr, ctrlFn func(st
 			return err
 		}
 	}
+
 	var err error
 	var lsa syscall.Sockaddr
 	if laddr != nil {
 		if lsa, err = laddr.sockaddr(fd.family); err != nil {
 			return err
 		} else if lsa != nil {
+			//fd和本地的ip+port绑定
 			if err = syscall.Bind(fd.pfd.Sysfd, lsa); err != nil {
 				return os.NewSyscallError("bind", err)
 			}
 		}
 	}
+
 	var rsa syscall.Sockaddr  // remote address from the user
 	var crsa syscall.Sockaddr // remote address we actually connected to
 	if raddr != nil {
@@ -190,6 +199,7 @@ func (fd *netFD) listenStream(laddr sockaddr, backlog int, ctrlFn func(string, s
 			return err
 		}
 	}
+
 	//系统调用bind()
 	if err = syscall.Bind(fd.pfd.Sysfd, lsa); err != nil {
 		return os.NewSyscallError("bind", err)
@@ -201,12 +211,13 @@ func (fd *netFD) listenStream(laddr sockaddr, backlog int, ctrlFn func(string, s
 	//再把该fd加入epoll监听
 	if err = fd.init(); err != nil {
 		return err
-	}
+	} //初始化netfd，底层会创建一个epoll实例，然后把listen_fd 添加到epoll的监听里
 	lsa, _ = syscall.Getsockname(fd.pfd.Sysfd)
 	fd.setAddr(fd.addrFunc()(lsa), nil)
 	return nil
 }
 
+//创建listen_fd，并监听udp请求
 func (fd *netFD) listenDatagram(laddr sockaddr, ctrlFn func(string, string, syscall.RawConn) error) error {
 	switch addr := laddr.(type) {
 	case *UDPAddr:
@@ -247,10 +258,10 @@ func (fd *netFD) listenDatagram(laddr sockaddr, ctrlFn func(string, string, sysc
 	}
 	if err = syscall.Bind(fd.pfd.Sysfd, lsa); err != nil {
 		return os.NewSyscallError("bind", err)
-	}
+	} //bind，fd和ip：端口绑定
 	if err = fd.init(); err != nil {
 		return err
-	}
+	} //创建epoll，并把listen_fd加入到epoll里
 	lsa, _ = syscall.Getsockname(fd.pfd.Sysfd)
 	fd.setAddr(fd.addrFunc()(lsa), nil)
 	return nil

@@ -6,8 +6,11 @@ package types
 
 // A Type represents a type of Go.
 // All types implement the Type interface.
+// Type接口，代表Go的一种类型
+// 所有类型都实现了Type接口
 type Type interface {
 	// Underlying returns the underlying type of a type.
+	// 获取本类型的底层类型
 	Underlying() Type
 
 	// String returns a string representation of a type.

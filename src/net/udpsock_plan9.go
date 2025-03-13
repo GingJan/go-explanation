@@ -121,7 +121,7 @@ func unmarshalUDPHeader(b []byte) (*udpHeader, []byte) {
 }
 
 func (sl *sysListener) listenUDP(ctx context.Context, laddr *UDPAddr) (*UDPConn, error) {
-	l, err := listenPlan9(ctx, sl.network, laddr)
+	l, err := listenPlan9(ctx, sl.network, laddr) //plan9系统调用
 	if err != nil {
 		return nil, err
 	}

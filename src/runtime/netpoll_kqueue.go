@@ -16,9 +16,9 @@ import (
 var (
 	kq int32 = -1
 
-	netpollBreakRd, netpollBreakWr uintptr // for netpollBreak
+	netpollBreakRd, netpollBreakWr uintptr // for netpollBreak，内部管道的读写端，用来中断epoll_wait的阻塞/休眠
 
-	netpollWakeSig uint32 // used to avoid duplicate calls of netpollBreak
+	netpollWakeSig uint32 // 该变量用来避免重复调用 netpollBreak
 )
 
 // BSD和mac的epoll —— kevent 的初始化
@@ -26,13 +26,13 @@ var (
 // 2.创建非阻塞读写管道pipe（用于终端epoll阻塞）
 // 3.epoll添加对管道读事件的监听
 func netpollinit() {
-	kq = kqueue()
+	kq = kqueue() //创建epoll实例
 	if kq < 0 {
 		println("runtime: kqueue failed with", -kq)
 		throw("runtime: netpollinit failed")
 	}
 	closeonexec(kq)
-	r, w, errno := nonblockingPipe()
+	r, w, errno := nonblockingPipe() //创建一个管道
 	if errno != 0 {
 		println("runtime: pipe failed with", -errno)
 		throw("runtime: pipe failed")
@@ -41,7 +41,7 @@ func netpollinit() {
 		filter: _EVFILT_READ,
 		flags:  _EV_ADD,
 	}
-	*(*uintptr)(unsafe.Pointer(&ev.ident)) = uintptr(r)
+	*(*uintptr)(unsafe.Pointer(&ev.ident)) = uintptr(r) //epoll添加管道的读端的监听（以便后面可通过往netpollBreakWr写入数据来唤醒epoll_wait）
 	n := kevent(kq, &ev, 1, nil, 0, nil)
 	if n < 0 {
 		println("runtime: kevent failed with", -n)
@@ -86,6 +86,7 @@ func netpollarm(pd *pollDesc, mode int) {
 }
 
 // netpollBreak interrupts a kevent.
+// 通过向管道写端写入数据的方式，触发可读事件
 func netpollBreak() {
 	if atomic.Cas(&netpollWakeSig, 0, 1) {
 		for {
@@ -108,6 +109,7 @@ func netpollBreak() {
 // delay < 0: blocks indefinitely
 // delay == 0: does not block, just polls
 // delay > 0: block for up to that many nanoseconds
+// 相当于epoll_wait
 func netpoll(delay int64) gList {
 	if kq == -1 {
 		return gList{}
@@ -128,7 +130,7 @@ func netpoll(delay int64) gList {
 	}
 	var events [64]keventt
 retry:
-	n := kevent(kq, nil, 0, &events[0], int32(len(events)), tp)
+	n := kevent(kq, nil, 0, &events[0], int32(len(events)), tp) //相当于epoll_wait
 	if n < 0 {
 		if n != -_EINTR {
 			println("runtime: kevent on fd", kq, "failed with", -n)
@@ -155,7 +157,7 @@ retry:
 				// nonblocking poll. Only read the byte
 				// if blocking.
 				var tmp [16]byte
-				read(int32(netpollBreakRd), noescape(unsafe.Pointer(&tmp[0])), int32(len(tmp)))
+				read(int32(netpollBreakRd), noescape(unsafe.Pointer(&tmp[0])), int32(len(tmp))) //阻塞在管道的读端，当有数据可读时，则返回
 				atomic.Store(&netpollWakeSig, 0)
 			}
 			continue

@@ -35,6 +35,7 @@ const (
 func lock(l *mutex) {
 	lockWithRank(l, getLockRank(l))
 }
+
 //通过对mutex.key字段的原子操作来获取锁
 func lock2(l *mutex) {
 	gp := getg()
@@ -47,28 +48,28 @@ func lock2(l *mutex) {
 	if atomic.Casuintptr(&l.key, 0, locked) {
 		return
 	}
-	semacreate(gp.m)//对m所在线程初始化线程互斥锁和线程信号量
+	semacreate(gp.m) //对m所在线程初始化线程互斥锁和线程信号量
 
 	// On uniprocessor's, no point spinning.
 	// On multiprocessors, spin for ACTIVE_SPIN attempts.
-	spin := 0//自旋次数/尝试次数
+	spin := 0 //自旋次数/尝试次数
 	if ncpu > 1 {
 		spin = active_spin
 	}
 Loop:
 	for i := 0; ; i++ {
 		v := atomic.Loaduintptr(&l.key)
-		if v&locked == 0 {//未上锁，尝试获取锁
+		if v&locked == 0 { //未上锁，尝试获取锁
 			// Unlocked. Try to lock.
 			if atomic.Casuintptr(&l.key, v, v|locked) {
-				return//获取到锁了，立刻返回
+				return //获取到锁了，立刻返回
 			}
 			i = 0
 		}
 		if i < spin {
-			procyield(active_spin_cnt)//执行30次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
+			procyield(active_spin_cnt) //执行30次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
 		} else if i < spin+passive_spin {
-			osyield()//挂起当前线程1us
+			osyield() //挂起当前线程1us
 		} else {
 			// Someone else has it.
 			// l->waitm points to a linked list of M's waiting
@@ -82,13 +83,13 @@ Loop:
 					break
 				}
 				v = atomic.Loaduintptr(&l.key)
-				if v&locked == 0 {//解锁了，再次尝试获取锁
+				if v&locked == 0 { //解锁了，再次尝试获取锁
 					continue Loop
 				}
 			}
-			if v&locked != 0 {//还没解锁
+			if v&locked != 0 { //还没解锁
 				// Queued. Wait. 则把本线程进入阻塞队列，等待被其他线程唤醒
-				semasleep(-1)//把当前线程挂起休眠，直到有其他线程调用semawakeup唤醒
+				semasleep(-1) //把当前线程挂起休眠，直到有其他线程调用semawakeup唤醒
 				i = 0
 			}
 		}
@@ -160,18 +161,19 @@ func notewakeup(n *note) {
 		// 若原n.key==locke，则等待在该n的人被唤醒两次，这是不允许的
 		// Two notewakeups! Not allowed.
 		throw("notewakeup - double wakeup")
-	default://原n.key==某个在该n上等待的m
+	default: //原n.key==某个在该n上等待的m
 		// Must be the waiting m. Wake it up.
 		semawakeup((*m)(unsafe.Pointer(v)))
 	}
 }
 
+//让当前的 goroutine 挂起，直到 note 被唤醒。
 func notesleep(n *note) {
 	gp := getg()
-	if gp != gp.m.g0 {//当前函数必须在g0上执行
+	if gp != gp.m.g0 { //当前函数必须在g0上执行
 		throw("notesleep not on g0")
 	}
-	semacreate(gp.m)
+	semacreate(gp.m) //创建通知信号量
 	if !atomic.Casuintptr(&n.key, 0, uintptr(unsafe.Pointer(gp.m))) {
 		// Must be locked (got wakeup).
 		if n.key != locked {
@@ -180,18 +182,19 @@ func notesleep(n *note) {
 		return
 	}
 	// Queued. Sleep.
-	gp.m.blocked = true//入队，进入休眠
+	gp.m.blocked = true //入队，进入休眠
 	if *cgo_yield == nil {
-		semasleep(-1)//挂起当前线程，进入休眠
+		semasleep(-1) //挂起当前OS线程，进入休眠，直到有唤醒通知
 	} else {
+		//调用cgo的代码，则走这里
 		// Sleep for an arbitrary-but-moderate interval to poll libc interceptors.
 		const ns = 10e6
 		for atomic.Loaduintptr(&n.key) == 0 {
-			semasleep(ns)//挂起当前线程，进入ns纳秒休眠
+			semasleep(ns) //挂起当前线程，休眠ns纳秒
 			asmcgocall(*cgo_yield, nil)
 		}
 	}
-	gp.m.blocked = false//推出休眠
+	gp.m.blocked = false //退出休眠
 }
 
 //go:nosplit

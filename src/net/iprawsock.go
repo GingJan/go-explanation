@@ -28,6 +28,7 @@ import (
 // implemented.
 
 // IPAddr represents the address of an IP end point.
+// IP地址，无需port，相比tcp和udp更底层
 type IPAddr struct {
 	IP   IP
 	Zone string // IPv6 scoped addressing zone
@@ -227,6 +228,7 @@ func DialIP(network string, laddr, raddr *IPAddr) (*IPConn, error) {
 // If the IP field of laddr is nil or an unspecified IP address,
 // ListenIP listens on all available IP addresses of the local system
 // except multicast IP addresses.
+// 监听指定ip，直接在ip层上构建服务（不需要tcp和udp）
 func ListenIP(network string, laddr *IPAddr) (*IPConn, error) {
 	if laddr == nil {
 		laddr = &IPAddr{}

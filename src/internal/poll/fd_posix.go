@@ -13,6 +13,7 @@ import (
 
 // eofError returns io.EOF when fd is available for reading end of
 // file.
+// 是否以读取完毕（已内容可读），是则返回EOF
 func (fd *FD) eofError(n int, err error) error {
 	if n == 0 && err == nil && fd.ZeroReadIsEOF {
 		return io.EOF
@@ -21,6 +22,7 @@ func (fd *FD) eofError(n int, err error) error {
 }
 
 // Shutdown wraps syscall.Shutdown.
+// 关闭连接，封装了底层的 syscall.Shutdown
 func (fd *FD) Shutdown(how int) error {
 	if err := fd.incref(); err != nil {
 		return err

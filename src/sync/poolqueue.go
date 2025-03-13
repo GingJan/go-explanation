@@ -31,7 +31,7 @@ type poolDequeue struct {
 	// The head index is stored in the most-significant bits so
 	// that we can atomically add to it and the overflow is
 	// harmless.
-	headTail uint64
+	headTail uint64 //高32b存头下标，低32b存尾下标
 
 	// vals is a ring buffer of interface{} values stored in this
 	// dequeue. The size of this must be a power of 2.

@@ -18,8 +18,8 @@ import (
 //go:linkname runtimeNano runtime.nanotime
 func runtimeNano() int64
 
-func runtime_pollServerInit()                                //相当于epoll_create()，初始化/创建epoll实例
-func runtime_pollOpen(fd uintptr) (uintptr, int)             //相当于epoll_add(ADD)
+func runtime_pollServerInit()                                //相当于epoll_create()，初始化/创建epoll实例，runtime.poll_runtime_pollServerInit
+func runtime_pollOpen(fd uintptr) (uintptr, int)             //相当于epoll_add(ADD)， runtime.poll_runtime_pollOpen
 func runtime_pollClose(ctx uintptr)                          //相当于epoll_add(DEL)，把pd指向的底层fd从epoll的监听队列移除
 func runtime_pollWait(ctx uintptr, mode int) int             //相当于epoll_wait，对应底层的 runtime.poll_runtime_pollWait 函数
 func runtime_pollWaitCanceled(ctx uintptr, mode int) int     //本函数只用于windows系统。指向 runtime.poll_runtime_pollWaitCanceled，调用本函数，返回bool或阻塞等待IO
@@ -82,11 +82,12 @@ func (pd *pollDesc) prepareWrite(isFile bool) error {
 	return pd.prepare('w', isFile)
 }
 
+//可以理解为在read或write上进行epollwait
 func (pd *pollDesc) wait(mode int, isFile bool) error {
 	if pd.runtimeCtx == 0 {
 		return errors.New("waiting for unsupported file type")
 	}
-	res := runtime_pollWait(pd.runtimeCtx, mode) //阻塞在此，直到底层fd上的读写事件就绪
+	res := runtime_pollWait(pd.runtimeCtx, mode) //g阻塞在此，直到底层fd上的读写事件就绪
 	return convertErr(res, isFile)               //判断是否有异常
 }
 

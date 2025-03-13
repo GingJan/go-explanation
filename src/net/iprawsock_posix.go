@@ -143,5 +143,5 @@ func (sl *sysListener) listenIP(ctx context.Context, laddr *IPAddr) (*IPConn, er
 	if err != nil {
 		return nil, err
 	}
-	return newIPConn(fd), nil
+	return newIPConn(fd), nil //创建ip连接实例
 }

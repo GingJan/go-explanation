@@ -119,6 +119,7 @@ type Request struct {
 	// connect to, while the Request's Host field optionally
 	// specifies the Host header value to send in the HTTP
 	// request.
+	// 比如
 	URL *url.URL
 
 	// The protocol version for incoming server requests.
@@ -173,7 +174,7 @@ type Request struct {
 	// Body must allow Read to be called concurrently with Close.
 	// In particular, calling Close should unblock a Read waiting
 	// for input.
-	Body io.ReadCloser
+	Body io.ReadCloser //指向底层的tcp连接
 
 	// GetBody defines an optional func to return a new copy of
 	// Body. It is used for client requests when a redirect requires
@@ -277,7 +278,7 @@ type Request struct {
 	// sets RemoteAddr to an "IP:port" address before invoking a
 	// handler.
 	// This field is ignored by the HTTP client.
-	RemoteAddr string
+	RemoteAddr string //客户端ip
 
 	// RequestURI is the unmodified request-target of the
 	// Request-Line (RFC 7230, Section 3.1.1) as sent by the client
@@ -350,7 +351,7 @@ func (r *Request) WithContext(ctx context.Context) *Request {
 	}
 	r2 := new(Request)
 	*r2 = *r
-	r2.ctx = ctx
+	r2.ctx = ctx             //复制请求，使用新ctx替代
 	r2.URL = cloneURL(r.URL) // legacy behavior; TODO: try to remove. Issue 23544
 	return r2
 }
@@ -366,7 +367,7 @@ func (r *Request) Clone(ctx context.Context) *Request {
 	}
 	r2 := new(Request)
 	*r2 = *r
-	r2.ctx = ctx
+	r2.ctx = ctx //复制request，使用新ctx替代
 	r2.URL = cloneURL(r.URL)
 
 	//以下内容在 Request.WithContext 是没有的
@@ -389,17 +390,20 @@ func (r *Request) Clone(ctx context.Context) *Request {
 
 // ProtoAtLeast reports whether the HTTP protocol used
 // in the request is at least major.minor.
+// 请求所用的最低http协议版本
 func (r *Request) ProtoAtLeast(major, minor int) bool {
 	return r.ProtoMajor > major ||
 		r.ProtoMajor == major && r.ProtoMinor >= minor
 }
 
 // UserAgent returns the client's User-Agent, if sent in the request.
+// 获取 User-Agent 头的信息。
 func (r *Request) UserAgent() string {
 	return r.Header.Get("User-Agent")
 }
 
 // Cookies parses and returns the HTTP cookies sent with the request.
+// 获取所有 Cookie
 func (r *Request) Cookies() []*Cookie {
 	return readCookies(r.Header, "")
 }
@@ -411,6 +415,7 @@ var ErrNoCookie = errors.New("http: named cookie not present")
 // ErrNoCookie if not found.
 // If multiple cookies match the given name, only one cookie will
 // be returned.
+// 获取特定名称的 Cookie，如果不存在则返回错误。
 func (r *Request) Cookie(name string) (*Cookie, error) {
 	for _, c := range readCookies(r.Header, name) {
 		return c, nil
@@ -424,6 +429,7 @@ func (r *Request) Cookie(name string) (*Cookie, error) {
 // separated by semicolon.
 // AddCookie only sanitizes c's name and value, and does not sanitize
 // a Cookie header already present in the request.
+// 添加cookie信息
 func (r *Request) AddCookie(c *Cookie) {
 	s := fmt.Sprintf("%s=%s", sanitizeCookieName(c.Name), sanitizeCookieValue(c.Value))
 	if c := r.Header.Get("Cookie"); c != "" {
@@ -441,6 +447,7 @@ func (r *Request) AddCookie(c *Cookie) {
 // as a method is that the compiler can diagnose programs that use the
 // alternate (correct English) spelling req.Referrer() but cannot
 // diagnose programs that use Header["Referrer"].
+// 获取 Referer 头。
 func (r *Request) Referer() string {
 	return r.Header.Get("Referer")
 }
@@ -457,6 +464,7 @@ var multipartByReader = &multipart.Form{
 // multipart/form-data or a multipart/mixed POST request, else returns nil and an error.
 // Use this function instead of ParseMultipartForm to
 // process the request body as a stream.
+// 返回 MIME 的 multipart reader，该reader用于读取上传的文件流数据
 func (r *Request) MultipartReader() (*multipart.Reader, error) {
 	if r.MultipartForm == multipartByReader {
 		return nil, errors.New("http: MultipartReader called twice")
@@ -873,7 +881,7 @@ func NewRequestWithContext(ctx context.Context, method, url string, body io.Read
 	// The host's colon:port should be normalized. See Issue 14836.
 	u.Host = removeEmptyPort(u.Host)
 	req := &Request{
-		ctx:        ctx,
+		ctx:        ctx, //新建请求
 		Method:     method,
 		URL:        u,
 		Proto:      "HTTP/1.1",
@@ -933,6 +941,7 @@ func NewRequestWithContext(ctx context.Context, method, url string, body io.Read
 // BasicAuth returns the username and password provided in the request's
 // Authorization header, if the request uses HTTP Basic Authentication.
 // See RFC 2617, Section 2.
+// 解析 Authorization: Basic 头，返回用户名和密码。
 func (r *Request) BasicAuth() (username, password string, ok bool) {
 	auth := r.Header.Get("Authorization")
 	if auth == "" {
@@ -984,7 +993,7 @@ func parseRequestLine(line string) (method, requestURI, proto string, ok bool) {
 	return method, requestURI, proto, true
 }
 
-var textprotoReaderPool sync.Pool
+var textprotoReaderPool sync.Pool //读取文本类协议的reader
 
 func newTextprotoReader(br *bufio.Reader) *textproto.Reader {
 	if v := textprotoReaderPool.Get(); v != nil {
@@ -992,7 +1001,7 @@ func newTextprotoReader(br *bufio.Reader) *textproto.Reader {
 		tr.R = br
 		return tr
 	}
-	return textproto.NewReader(br)
+	return textproto.NewReader(br) //新建实例
 }
 
 func putTextprotoReader(r *textproto.Reader) {
@@ -1017,7 +1026,7 @@ func ReadRequest(b *bufio.Reader) (*Request, error) {
 }
 
 func readRequest(b *bufio.Reader) (req *Request, err error) {
-	tp := newTextprotoReader(b)
+	tp := newTextprotoReader(b) //文本类协议的reader
 	req = new(Request)
 
 	// First line: GET /index.html HTTP/1.0
@@ -1033,7 +1042,7 @@ func readRequest(b *bufio.Reader) (req *Request, err error) {
 	}()
 
 	var ok bool
-	req.Method, req.RequestURI, req.Proto, ok = parseRequestLine(s)
+	req.Method, req.RequestURI, req.Proto, ok = parseRequestLine(s) //从请求头的第一行文本解析出 method，path，proto
 	if !ok {
 		return nil, badStringError("malformed HTTP request", s)
 	}
@@ -1041,7 +1050,7 @@ func readRequest(b *bufio.Reader) (req *Request, err error) {
 		return nil, badStringError("invalid method", req.Method)
 	}
 	rawurl := req.RequestURI
-	if req.ProtoMajor, req.ProtoMinor, ok = ParseHTTPVersion(req.Proto); !ok {
+	if req.ProtoMajor, req.ProtoMinor, ok = ParseHTTPVersion(req.Proto); !ok { //解析协议版本
 		return nil, badStringError("malformed HTTP version", req.Proto)
 	}
 
@@ -1068,7 +1077,7 @@ func readRequest(b *bufio.Reader) (req *Request, err error) {
 		req.URL.Scheme = ""
 	}
 
-	// Subsequent lines: Key: value.
+	// Subsequent lines: Key: value. 请求头后续的行
 	mimeHeader, err := tp.ReadMIMEHeader()
 	if err != nil {
 		return nil, err
@@ -1249,6 +1258,7 @@ func parsePostForm(r *Request) (vs url.Values, err error) {
 //
 // ParseMultipartForm calls ParseForm automatically.
 // ParseForm is idempotent.
+// 解析 URL 查询参数和 application/x-www-form-urlencoded 的 POST 数据。
 func (r *Request) ParseForm() error {
 	var err error
 	if r.PostForm == nil {
@@ -1292,6 +1302,7 @@ func (r *Request) ParseForm() error {
 // If ParseForm returns an error, ParseMultipartForm returns it but also
 // continues parsing the request body.
 // After one call to ParseMultipartForm, subsequent calls have no effect.
+// 解析 multipart/form-data（通常用于文件上传）。
 func (r *Request) ParseMultipartForm(maxMemory int64) error {
 	if r.MultipartForm == multipartByReader {
 		return errors.New("http: multipart handled by MultipartReader")
@@ -1337,6 +1348,7 @@ func (r *Request) ParseMultipartForm(maxMemory int64) error {
 // If key is not present, FormValue returns the empty string.
 // To access multiple values of the same key, call ParseForm and
 // then inspect Request.Form directly.
+// 先从 PostForm 查找，再从 Form 查找，返回第一个匹配的值。
 func (r *Request) FormValue(key string) string {
 	if r.Form == nil {
 		r.ParseMultipartForm(defaultMaxMemory)

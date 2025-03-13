@@ -221,7 +221,7 @@ var errNoOverlap = errors.New("invalid range: failed to overlap")
 // content must be seeked to the beginning of the file.
 // The sizeFunc is called at most once. Its error, if any, is sent in the HTTP response.
 func serveContent(w ResponseWriter, r *Request, name string, modtime time.Time, sizeFunc func() (int64, error), content io.ReadSeeker) {
-	setLastModified(w, modtime)
+	setLastModified(w, modtime) //设置Last-Modified响应头数据
 	done, rangeReq := checkPreconditions(w, r, modtime)
 	if done {
 		return
@@ -233,8 +233,8 @@ func serveContent(w ResponseWriter, r *Request, name string, modtime time.Time, 
 	// if the Content-Type is unset explicitly, do not sniff the type.
 	ctypes, haveType := w.Header()["Content-Type"]
 	var ctype string
-	if !haveType {
-		ctype = mime.TypeByExtension(filepath.Ext(name))
+	if !haveType { //未设置content-type响应头
+		ctype = mime.TypeByExtension(filepath.Ext(name)) //返回文件的扩展名
 		if ctype == "" {
 			// read a chunk to decide between utf-8 text and binary
 			var buf [sniffLen]byte
@@ -247,7 +247,7 @@ func serveContent(w ResponseWriter, r *Request, name string, modtime time.Time, 
 			}
 		}
 		w.Header().Set("Content-Type", ctype)
-	} else if len(ctypes) > 0 {
+	} else if len(ctypes) > 0 { //已经设置了，有多个content-type响应头
 		ctype = ctypes[0]
 	}
 
@@ -327,16 +327,16 @@ func serveContent(w ResponseWriter, r *Request, name string, modtime time.Time, 
 			}()
 		}
 
-		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Accept-Ranges", "bytes") //单位
 		if w.Header().Get("Content-Encoding") == "" {
-			w.Header().Set("Content-Length", strconv.FormatInt(sendSize, 10))
+			w.Header().Set("Content-Length", strconv.FormatInt(sendSize, 10)) //响应体长度/字节
 		}
 	}
 
-	w.WriteHeader(code)
+	w.WriteHeader(code) //http状态码
 
-	if r.Method != "HEAD" {
-		io.CopyN(w, sendContent, sendSize)
+	if r.Method != "HEAD" { //HEAD请求是没有响应体的
+		io.CopyN(w, sendContent, sendSize) //把sendContent里的数据（响应体）复制到w（返回给客户端）
 	}
 }
 
@@ -528,6 +528,7 @@ func isZeroTime(t time.Time) bool {
 	return t.IsZero() || t.Equal(unixEpochTime)
 }
 
+//设置Last-Modified响应头数据
 func setLastModified(w ResponseWriter, modtime time.Time) {
 	if !isZeroTime(modtime) {
 		w.Header().Set("Last-Modified", modtime.UTC().Format(TimeFormat))
@@ -849,6 +850,8 @@ func (f *fileHandler) ServeHTTP(w ResponseWriter, r *Request) {
 		upath = "/" + upath
 		r.URL.Path = upath
 	}
+
+	//r.URL.Path 并定以/开头
 	serveFile(w, r, f.root, path.Clean(upath), true)
 }
 

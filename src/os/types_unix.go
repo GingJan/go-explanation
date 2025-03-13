@@ -12,6 +12,7 @@ import (
 )
 
 // A fileStat is the implementation of FileInfo returned by Stat and Lstat.
+// FileInfo接口的实现，
 type fileStat struct {
 	name    string
 	size    int64

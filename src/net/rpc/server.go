@@ -168,6 +168,8 @@ type service struct {
 // Request is a header written before every RPC call. It is used internally
 // but documented here as an aid to debugging, such as when analyzing
 // network traffic.
+// 在每个rpc请求的头，都会写入本结构体的信息
+// 内部使用，在这里列出是为了方便调试，如分析网络流量
 type Request struct {
 	ServiceMethod string   // format: "Service.Method"
 	Seq           uint64   // sequence number chosen by client
@@ -177,6 +179,8 @@ type Request struct {
 // Response is a header written before every RPC return. It is used internally
 // but documented here as an aid to debugging, such as when analyzing
 // network traffic.
+// 在每个rpc响应的头，都会有本结构体的信息
+// 内部使用，在这里列出是为了方便调试，如分析网络流量
 type Response struct {
 	ServiceMethod string    // echoes that of the Request
 	Seq           uint64    // echoes that of the request
@@ -185,12 +189,15 @@ type Response struct {
 }
 
 // Server represents an RPC Server.
+// rpc服务器，实现了 Handler 接口
 type Server struct {
-	serviceMap sync.Map   // map[string]*service
-	reqLock    sync.Mutex // protects freeReq
-	freeReq    *Request
-	respLock   sync.Mutex // protects freeResp
-	freeResp   *Response
+	serviceMap sync.Map // map[string]*service
+
+	reqLock sync.Mutex // protects freeReq
+	freeReq *Request
+
+	respLock sync.Mutex // protects freeResp
+	freeResp *Response
 }
 
 // NewServer returns a new Server.
@@ -199,9 +206,15 @@ func NewServer() *Server {
 }
 
 // DefaultServer is the default instance of *Server.
+// 默认的 rpc 服务器实例
 var DefaultServer = NewServer()
 
+// logRegisterError specifies whether to log problems during method registration.
+// To debug registration, recompile the package with this set to true.
+const logRegisterError = false
+
 // Is this type exported or a builtin?
+//本包使用的内部函数，判断传入类型是可导出的还是内用的
 func isExportedOrBuiltinType(t reflect.Type) bool {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
@@ -231,10 +244,6 @@ func (server *Server) Register(rcvr any) error {
 func (server *Server) RegisterName(name string, rcvr any) error {
 	return server.register(rcvr, name, true)
 }
-
-// logRegisterError specifies whether to log problems during method registration.
-// To debug registration, recompile the package with this set to true.
-const logRegisterError = false
 
 func (server *Server) register(rcvr any, name string, useName bool) error {
 	s := new(service)
@@ -627,7 +636,7 @@ func (server *Server) readRequestHeader(codec ServerCodec) (svc *service, mtype 
 // go statement.
 func (server *Server) Accept(lis net.Listener) {
 	for {
-		conn, err := lis.Accept()
+		conn, err := lis.Accept() //新连接
 		if err != nil {
 			log.Print("rpc.Serve: accept:", err.Error())
 			return
@@ -701,12 +710,12 @@ func (server *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		io.WriteString(w, "405 must CONNECT\n")
 		return
 	}
-	conn, _, err := w.(http.Hijacker).Hijack() //挟持连接，作其他用途
+	conn, _, err := w.(http.Hijacker).Hijack() //挟持连接，作其他用途，这里是用作rpc（用于http的tcp连接改为用于rpc）
 	if err != nil {
 		log.Print("rpc hijacking ", req.RemoteAddr, ": ", err.Error())
 		return
 	}
-	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n")
+	io.WriteString(conn, "HTTP/1.0 "+connected+"\n\n") //返回响应给客户端，告知要转为rpc协议
 	server.ServeConn(conn)
 }
 

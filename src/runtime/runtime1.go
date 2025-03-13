@@ -462,7 +462,7 @@ func timediv(v int64, div int32, rem *int32) int32 {
 }
 
 // Helpers for Go. Must be NOSPLIT, must only call NOSPLIT functions, and must not block.
-// 标记占用一次当前g所在的m
+// “获取”或“持有”当前线程（M）的控制权。实际上是对当前 M 的引用计数加 1，防止调度器在某些关键操作期间将当前 P（处理器）从 M 上解绑。
 //go:nosplit
 func acquirem() *m {
 	_g_ := getg()

@@ -26,6 +26,7 @@ func (f *File) Stat() (FileInfo, error) {
 }
 
 // statNolog stats a file with no test logging.
+//获取name文件的元信息
 func statNolog(name string) (FileInfo, error) {
 	var fs fileStat
 	err := ignoringEINTR(func() error {
@@ -34,11 +35,12 @@ func statNolog(name string) (FileInfo, error) {
 	if err != nil {
 		return nil, &PathError{Op: "stat", Path: name, Err: err}
 	}
-	fillFileStatFromSys(&fs, name)
+	fillFileStatFromSys(&fs, name) //获取name文件的元信息
 	return &fs, nil
 }
 
 // lstatNolog lstats a file with no test logging.
+//获取name文件的元信息
 func lstatNolog(name string) (FileInfo, error) {
 	var fs fileStat
 	err := ignoringEINTR(func() error {
@@ -47,6 +49,6 @@ func lstatNolog(name string) (FileInfo, error) {
 	if err != nil {
 		return nil, &PathError{Op: "lstat", Path: name, Err: err}
 	}
-	fillFileStatFromSys(&fs, name)
+	fillFileStatFromSys(&fs, name) //获取name文件的元信息
 	return &fs, nil
 }

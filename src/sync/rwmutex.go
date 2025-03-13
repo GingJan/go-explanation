@@ -58,7 +58,7 @@ func (rw *RWMutex) RLock() {
 		_ = rw.w.state
 		race.Disable()
 	}
-	if atomic.AddInt32(&rw.readerCount, 1) < 0 {
+	if atomic.AddInt32(&rw.readerCount, 1) < 0 { //持有读锁的reader数量+1，返回的指<0说明此时该锁被某个writer等待着写锁
 		// A writer is pending, wait for it.
 		runtime_SemacquireMutex(&rw.readerSem, false, 0)
 	}

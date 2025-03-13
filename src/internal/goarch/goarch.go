@@ -28,6 +28,7 @@ const (
 
 // PtrSize is the size of a pointer in bytes - unsafe.Sizeof(uintptr(0)) but as an ideal constant.
 // It is also the size of the machine's native word size (that is, 4 on 32-bit systems, 8 on 64-bit).
+// 指针的大小，字节B，可能值为4或8
 const PtrSize = 4 << (^uintptr(0) >> 63)
 
 // ArchFamily is the architecture family (AMD64, ARM, ...)

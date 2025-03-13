@@ -17,9 +17,10 @@ const debugSelect = false
 // Select case descriptor.
 // Known to compiler.
 // Changes here must also be made in src/cmd/compile/internal/walk/select.go's scasetype.
+// select语句里的case
 type scase struct {
-	c    *hchan         // chan
-	elem unsafe.Pointer // data element
+	c    *hchan         // case里调用的chan
+	elem unsafe.Pointer // case里从chan返回的元素 data element
 }
 
 var (
@@ -119,6 +120,9 @@ func block() {
 // ordinal position of its respective select{recv,send,default} call.
 // Also, if the chosen scase was a receive operation, it reports whether
 // a value was received.
+// 本函数实现 select语句的功能
+// cas0参数指向 [ncases]scase 类型数组，就是select语句里的case的内容，并且 参数order0 指向 [2*ncases]uint16数组，这两的ncases必须小于65536
+// 这两个参数的值都在g的栈里
 func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, block bool) (int, bool) {
 	if debugSelect {
 		print("select: cas0=", cas0, "\n")
@@ -130,7 +134,7 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 	order1 := (*[1 << 17]uint16)(unsafe.Pointer(order0))
 
 	ncases := nsends + nrecvs
-	scases := cas1[:ncases:ncases]
+	scases := cas1[:ncases:ncases] //从0开始，取ncases个，cap也是ncases
 	pollorder := order1[:ncases:ncases]
 	lockorder := order1[ncases:][:ncases:ncases]
 	// NOTE: pollorder/lockorder's underlying array was not zero-initialized by compiler.
@@ -164,9 +168,11 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 	// optimizing (and needing to test).
 
 	// generate permuted order
+	// 生成排列顺序
+	// 先对case每条语句进行遍历，查找可立即执行的操作
 	norder := 0
 	for i := range scases {
-		cas := &scases[i]
+		cas := &scases[i] //某一条case语句
 
 		// Omit cases without channels from the poll and lock orders.
 		if cas.c == nil {
@@ -174,7 +180,8 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 			continue
 		}
 
-		j := fastrandn(uint32(norder + 1))
+		//计算出轮询顺序，对所有参与的通道进行洗牌（打乱顺序），以提供伪随机保证
+		j := fastrandn(uint32(norder + 1)) //获取随机数
 		pollorder[norder] = pollorder[j]
 		pollorder[j] = uint16(i)
 		norder++
@@ -182,6 +189,8 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 	pollorder = pollorder[:norder]
 	lockorder = lockorder[:norder]
 
+	// 操作是互斥的，所以需要获得所有case的通道的锁，这是通过对Hchan地址的排序来获得锁的顺序，这样就不会同时锁定所有涉及的通道
+	// 简单的堆排序，保证 nlogn 时间
 	// sort the cases by Hchan address to get the locking order.
 	// simple heap sort, to guarantee n log n time and constant stack footprint.
 	for i := range lockorder {

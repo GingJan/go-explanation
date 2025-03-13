@@ -206,6 +206,8 @@ func Offsetof(x ArbitraryType) uintptr
 // of a field of that type within a struct. This case is the same as the
 // value returned by reflect.TypeOf(s.f).FieldAlign().
 // The return value of Alignof is a Go constant.
+// 返回 变量 x 所需的对齐值，即该变量在内存中的 最小对齐要求。
+// 对齐值表示 变量的起始地址必须是该值的倍数，以保证高效的内存访问。比如int64，函数就返回8（8字节）
 func Alignof(x ArbitraryType) uintptr
 
 // The function Add adds len to ptr and returns the updated pointer

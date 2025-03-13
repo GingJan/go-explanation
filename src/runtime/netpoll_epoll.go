@@ -12,7 +12,7 @@ _EPOLLOUT      = 可写事件
 _EPOLLERR      = 错误事件
 _EPOLLHUP      = 挂起事件
 _EPOLLRDHUP    = 对端关闭事件
-_EPOLLET       = 边缘触发模式
+_EPOLLET       = 边缘触发模式，如果要设置水平触发模式，则不添加这个标识即可
 _EPOLL_CLOEXEC = 文件描述符的 close-on-exec 标志
 _EPOLL_CTL_ADD = 0x1
 _EPOLL_CTL_DEL = 0x2
@@ -63,8 +63,8 @@ func netpollinit() {
 	ev := epollevent{
 		events: _EPOLLIN,
 	}
-	*(**uintptr)(unsafe.Pointer(&ev.data)) = &netpollBreakRd
-	errno = epollctl(epfd, _EPOLL_CTL_ADD, r, &ev) //添加对管道读事件的监听
+	*(**uintptr)(unsafe.Pointer(&ev.data)) = &netpollBreakRd //epoll添加管道的读端的监听（以便后面可通过往netpollBreakWr写入数据来唤醒epoll_wait）
+	errno = epollctl(epfd, _EPOLL_CTL_ADD, r, &ev)           //添加对管道读事件的监听
 	if errno != 0 {
 		println("runtime: epollctl failed with", -errno)
 		throw("runtime: epollctl failed")
@@ -80,11 +80,12 @@ func netpollIsPollDescriptor(fd uintptr) bool {
 
 func netpollopen(fd uintptr, pd *pollDesc) int32 {
 	var ev epollevent
-	ev.events = _EPOLLIN | _EPOLLOUT | _EPOLLRDHUP | _EPOLLET
+	ev.events = _EPOLLIN | _EPOLLOUT | _EPOLLRDHUP | _EPOLLET // _EPOLLET边缘触发模式
 	*(**pollDesc)(unsafe.Pointer(&ev.data)) = pd
 	return -epollctl(epfd, _EPOLL_CTL_ADD, int32(fd), &ev) //调用 epollctl 函数，将指定的fd添加到 epoll 实例中进行监听。返回错误码（错误码是负数，所以使用-，负负得正）
 }
 
+//释放listen_fd
 func netpollclose(fd uintptr) int32 {
 	var ev epollevent
 	return -epollctl(epfd, _EPOLL_CTL_DEL, int32(fd), &ev)
@@ -146,7 +147,7 @@ func netpoll(delay int64) gList {
 	}
 	var events [128]epollevent
 retry:
-	n := epollwait(epfd, &events[0], int32(len(events)), waitms) //等待waitms毫秒，最多返回len(events)个就绪事件，并把事件对应的数据写入到&events[0]指向的缓冲区
+	n := epollwait(epfd, &events[0], int32(len(events)), waitms) //等待waitms毫秒，最多返回len(events)个就绪事件，并把事件对应的数据写入到&events[0]指向的缓冲区，当调用netpollBreak往netpollBreakWr写入数据时，netpollBreakRd则有可读事件
 	if n < 0 {                                                   //发生了错误
 		if n != -_EINTR {
 			println("runtime: epollwait on fd", epfd, "failed with", -n)
@@ -190,7 +191,7 @@ retry:
 			mode += 'w'
 		}
 		if mode != 0 { //mode是r或w或rw情况下，则
-			pd := *(**pollDesc)(unsafe.Pointer(&ev.data)) //ev里的data其实就是runtime.pollDesc
+			pd := *(**pollDesc)(unsafe.Pointer(&ev.data)) //ev里的data其实就是 runtime.pollDesc
 			pd.setEventErr(ev.events == _EPOLLERR)
 			netpollready(&toRun, pd, mode) //把pd下关联的G解除阻塞等待，并把G添加到toRun里
 		}

@@ -312,7 +312,7 @@ func poll_runtime_pollWait(pd *pollDesc, mode int) int {
 		netpollarm(pd, mode)
 	}
 
-	for !netpollblock(pd, int32(mode), false) { // 阻塞在此，直到有事件触发（就绪）才返回到本函数poll_runtime_pollWait的调用方
+	for !netpollblock(pd, int32(mode), false) { // g阻塞在此，直到有事件触发（就绪）才返回到本函数poll_runtime_pollWait的调用方
 		errcode = netpollcheckerr(pd, int32(mode))
 		if errcode != pollNoError {
 			return errcode

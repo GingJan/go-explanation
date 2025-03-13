@@ -112,11 +112,13 @@ func ipVersion(network string) byte {
 
 // DefaultResolver is the resolver used by the package-level Lookup
 // functions and by Dialers without a specified Resolver.
+// 用于包级别域名查找的解析器，当Dialer没指定解析器时，使用本个默认解析器实例
 var DefaultResolver = &Resolver{}
 
 // A Resolver looks up names and numbers.
 //
 // A nil *Resolver is equivalent to a zero Resolver.
+// 域名解析器，解析域名和数字
 type Resolver struct {
 	// PreferGo controls whether Go's built-in DNS resolver is preferred
 	// on platforms where it's available. It is equivalent to setting
@@ -176,6 +178,7 @@ func LookupHost(host string) (addrs []string, err error) {
 
 // LookupHost looks up the given host using the local resolver.
 // It returns a slice of that host's addresses.
+// 使用本地解析器解析指定的host域名，返回主机多个地址（切片形式）
 func (r *Resolver) LookupHost(ctx context.Context, host string) (addrs []string, err error) {
 	// Make sure that no matter what we do later, host=="" is rejected.
 	// parseIP, for example, does accept empty strings.
@@ -408,9 +411,10 @@ func LookupPort(network, service string) (port int, err error) {
 }
 
 // LookupPort looks up the port for the given network and service.
+// 解析指定的network和service 的端口号
 func (r *Resolver) LookupPort(ctx context.Context, network, service string) (port int, err error) {
-	port, needsLookup := parsePort(service)
-	if needsLookup {
+	port, needsLookup := parsePort(service) //解析service对应的端口号
+	if needsLookup {                        //需要进一步查找service对应的端口号
 		switch network {
 		case "tcp", "tcp4", "tcp6", "udp", "udp4", "udp6":
 		case "": // a hint wildcard for Go 1.0 undocumented behavior
@@ -425,7 +429,7 @@ func (r *Resolver) LookupPort(ctx context.Context, network, service string) (por
 	}
 	if 0 > port || port > 65535 {
 		return 0, &AddrError{Err: "invalid port", Addr: service}
-	}
+	} //端口号非法
 	return port, nil
 }
 

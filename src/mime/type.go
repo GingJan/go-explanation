@@ -57,6 +57,7 @@ func setMimeTypes(lowerExt, mixExt map[string]string) {
 	}
 }
 
+//文件扩展名 => mimeType类型
 var builtinTypesLower = map[string]string{
 	".avif": "image/avif",
 	".css":  "text/css; charset=utf-8",
@@ -108,6 +109,7 @@ func initMime() {
 // On Windows, MIME types are extracted from the registry.
 //
 // Text types have the charset parameter set to "utf-8" by default.
+// 根据ext文件扩展名返回对应的mimeType, 映射关系builtinTypesLower
 func TypeByExtension(ext string) string {
 	once.Do(initMime)
 

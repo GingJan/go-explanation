@@ -11,6 +11,12 @@ import "unsafe"
 // Semacquire waits until *s > 0 and then atomically decrements it.
 // It is intended as a simple sleep primitive for use by the synchronization
 // library and should not be used directly.
+// 底层同步原语，用于实现轻量级信号量等待。
+// 它会 阻塞 直到 *s > 0，然后 原子性地递减 s，类似于 P（等待）操作。
+// 等待 *s > 0（表示资源可用）。
+// 原子递减 s（获取资源）。
+// 如果 s == 0，调用者会阻塞，直到 s 变为正数。
+// 调用本函数，意味着代表资源可用数量的s递减，
 func runtime_Semacquire(s *uint32)
 
 // SemacquireMutex is like Semacquire, but for profiling contended Mutexes.
@@ -63,6 +69,6 @@ func init() {
 func runtime_canSpin(i int) bool
 
 // runtime_doSpin does active spinning.
-func runtime_doSpin()//底层是调用procyield实现自旋，通过执行30次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
+func runtime_doSpin() //底层是调用procyield实现自旋，通过执行30次PAUSE指令，该指令是会占用CPU并消耗CPU时间片的
 
 func runtime_nanotime() int64

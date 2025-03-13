@@ -104,7 +104,7 @@ func main() {
 		dief("unknown pprof type %s\n", *pprofFlag)
 	}
 
-	ln, err := net.Listen("tcp", *httpFlag)
+	ln, err := net.Listen("tcp", *httpFlag) //http服务
 	if err != nil {
 		dief("failed to create server socket: %v\n", err)
 	}
@@ -133,7 +133,7 @@ func main() {
 
 	// Start http server.
 	http.HandleFunc("/", httpMain)
-	err = http.Serve(ln, nil)
+	err = http.Serve(ln, nil) //阻塞在此，启动一个http服务
 	dief("failed to start http server: %v\n", err)
 }
 

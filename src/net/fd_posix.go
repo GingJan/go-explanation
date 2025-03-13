@@ -19,10 +19,11 @@ type netFD struct {
 	pfd poll.FD
 
 	// immutable until Close
+	// 以下字段不可变
 	family      int
-	sotype      int    //socket type 有 syscall.SOCK_STREAM、SOCK_DGRAM、SOCK_RAW、SOCK_RDM、SOCK_SEQPACKET
-	isConnected bool   // handshake completed or use of association with peer
-	net         string // "file" 或
+	sotype      int    //socket type 有 syscall.SOCK_STREAM、syscall.SOCK_DGRAM、syscall.SOCK_RAW、syscall.SOCK_RDM、syscall.SOCK_SEQPACKET
+	isConnected bool   // 握手是否完成 handshake completed or use of association with peer
+	net         string // "file" 或 tcp
 	laddr       Addr   //本端地址
 	raddr       Addr   //对端地址
 }
@@ -35,23 +36,27 @@ func (fd *netFD) setAddr(laddr, raddr Addr) {
 
 func (fd *netFD) Close() error {
 	runtime.SetFinalizer(fd, nil)
-	return fd.pfd.Close()
+	return fd.pfd.Close() //关闭底层 poll.FD
 }
 
+//关闭连接
 func (fd *netFD) shutdown(how int) error {
 	err := fd.pfd.Shutdown(how)
-	runtime.KeepAlive(fd)
+	runtime.KeepAlive(fd) //防止fd被GC回收
 	return wrapSyscallError("shutdown", err)
 }
 
+//关闭网络连接的读端，tcp常见的关闭顺序是先关闭写端，然后等待对方关闭读端，再最后关闭读写端（发出FIN包，彻底关闭连接）
 func (fd *netFD) closeRead() error {
 	return fd.shutdown(syscall.SHUT_RD)
 }
 
+//关闭网络连接的写端，tcp常见的关闭顺序是先关闭写端，然后等待对方关闭读端，再最后关闭读写端（发出FIN包，彻底关闭连接）
 func (fd *netFD) closeWrite() error {
 	return fd.shutdown(syscall.SHUT_WR)
 }
 
+//从连接里读取数据到p
 func (fd *netFD) Read(p []byte) (n int, err error) {
 	n, err = fd.pfd.Read(p) //若没有数据，协程则被阻塞在这
 
@@ -65,6 +70,8 @@ func (fd *netFD) readFrom(p []byte) (n int, sa syscall.Sockaddr, err error) {
 	runtime.KeepAlive(fd)
 	return n, sa, wrapSyscallError(readFromSyscallName, err)
 }
+
+//p存放读取的数据，from对端地址
 func (fd *netFD) readFromInet4(p []byte, from *syscall.SockaddrInet4) (n int, err error) {
 	n, err = fd.pfd.ReadFromInet4(p, from)
 	runtime.KeepAlive(fd)

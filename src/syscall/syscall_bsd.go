@@ -273,10 +273,11 @@ func anyToSockaddr(rsa *RawSockaddrAny) (Sockaddr, error) {
 	return nil, EAFNOSUPPORT
 }
 
-func Accept(fd int) (nfd int, sa Sockaddr, err error) {//fd=监听fd，nfd=连接fd（连接fd是来一个请求就新建一个）
+//fd=监听fd，nfd=新连接fd（连接fd是来一个连接建立请求就新建一个fd）
+func Accept(fd int) (nfd int, sa Sockaddr, err error) {
 	var rsa RawSockaddrAny
 	var len _Socklen = SizeofSockaddrAny
-	nfd, err = accept(fd, &rsa, &len)//调用系统的accept函数
+	nfd, err = accept(fd, &rsa, &len) //调用对应系统平台的accept函数
 	if err != nil {
 		return
 	}

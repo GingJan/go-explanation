@@ -11,10 +11,21 @@ import (
 	"time"
 )
 
+// 判断chan是否已关闭
+func isClosedChan(c <-chan struct{}) bool {
+	select {
+	case <-c:
+		return true
+	default:
+		return false
+	}
+}
+
 // pipeDeadline is an abstraction for handling timeouts.
+// pipeDeadline 是处理超时的抽象
 type pipeDeadline struct {
-	mu     sync.Mutex // Guards timer and cancel
-	timer  *time.Timer
+	mu     sync.Mutex    // 保护下面两个字段的读写
+	timer  *time.Timer   //定时器
 	cancel chan struct{} // Must be non-nil
 }
 
@@ -38,9 +49,9 @@ func (d *pipeDeadline) set(t time.Time) {
 	d.timer = nil
 
 	// Time is zero, then there is no deadline.
-	closed := isClosedChan(d.cancel)
+	closed := isClosedChan(d.cancel) //
 	if t.IsZero() {
-		if closed {
+		if closed { //如果已关闭，则重新建立一个
 			d.cancel = make(chan struct{})
 		}
 		return
@@ -48,10 +59,10 @@ func (d *pipeDeadline) set(t time.Time) {
 
 	// Time in the future, setup a timer to cancel in the future.
 	if dur := time.Until(t); dur > 0 {
-		if closed {
+		if closed { //如果已关闭，则重新建立一个
 			d.cancel = make(chan struct{})
 		}
-		d.timer = time.AfterFunc(dur, func() {
+		d.timer = time.AfterFunc(dur, func() { //dur后，关闭d.cancel
 			close(d.cancel)
 		})
 		return
@@ -70,20 +81,12 @@ func (d *pipeDeadline) wait() chan struct{} {
 	return d.cancel
 }
 
-func isClosedChan(c <-chan struct{}) bool {
-	select {
-	case <-c:
-		return true
-	default:
-		return false
-	}
-}
-
 type pipeAddr struct{}
 
 func (pipeAddr) Network() string { return "pipe" }
 func (pipeAddr) String() string  { return "pipe" }
 
+//实现了 Conn 接口
 type pipe struct {
 	wrMu sync.Mutex // Serialize Write operations
 
@@ -110,6 +113,13 @@ type pipe struct {
 // Reads on one end are matched with writes on the other,
 // copying data directly between the two; there is no internal
 // buffering.
+// 创建一个同步的，内存的，全双工的网络连接，两端都实现了 Conn 接口
+// 一端写入的数据 会被 另一端读取，类似于 TCP 连接的行为。
+// 无内部缓冲，写入数据后，必须有读取方接收，否则写操作会阻塞
+// 应用场景：
+// 模拟网络连接：用于测试不依赖实际网络的应用逻辑。
+// 进程内通信（IPC）：在同一个进程中创建类似 socket 的通信通道。
+// 单元测试：模拟 net.Conn 进行网络操作的测试。
 func Pipe() (Conn, Conn) {
 	cb1 := make(chan []byte)
 	cb2 := make(chan []byte)

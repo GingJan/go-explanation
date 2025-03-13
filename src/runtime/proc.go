@@ -143,6 +143,8 @@ var initSigmask sigset
 
 // The main goroutine.
 // runtime的main函数
+// Go 程序的真正入口（main.main 只是用户代码的入口）
+// 运行时的核心部分，负责初始化 Go 运行时环境、创建主 Goroutine、执行 main.main，并在 main.main 结束后进行清理和退出。
 func main() {
 	g := getg() // g = main goroutine，不再是g0了
 
@@ -252,7 +254,7 @@ func main() {
 
 	//调用main.main函数
 	fn := main_main // make an indirect call, as the linker doesn't know the address of the main package when laying down the runtime
-	fn()
+	fn()            //执行用户定义的 main.main()
 
 	//main.main函数返回
 
@@ -5238,6 +5240,7 @@ var needSysmonWorkaround bool = false
 // Always runs without a P, so write barriers are not allowed.
 // 运行系统监控线程sysmon，无需绑定P执行，它是上帝函数，负责调度sched和其他goroutine的执行
 // 通过暂停线程运行的方式，实现暂停运行时长超过10ms的g，把p释放出来执行其他g
+// 该函数一直占用一个系统线程
 //go:nowritebarrierrec
 func sysmon() {
 	lock(&sched.lock)
@@ -5367,6 +5370,7 @@ func sysmon() {
 		}
 		// retake P's blocked in syscalls
 		// and preempt long running G's
+		// 为了保证每个协程都有执行的机会，系统监控服务会对执行时间过长(大于10ms)的协程、或者处于系统调用(大于20微秒)的协程进行抢占。抢占的核心逻辑通过retake()函数实现:
 		if retake(now) != 0 { //扫描每个p，判断p上是否有运行超过10ms的g，并执行抢占逻辑
 			idle = 0 //有发起系统调用的p，则sysmon休眠的时间不能太长，以便能立即响应
 		} else { //无发起系统调用的p，sysmon可休眠长一点

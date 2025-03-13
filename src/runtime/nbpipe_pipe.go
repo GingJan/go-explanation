@@ -6,6 +6,7 @@
 
 package runtime
 
+//创建一个非阻塞的pipe管道，r读端，w写端
 func nonblockingPipe() (r, w int32, errno int32) {
 	r, w, errno = pipe() //系统调用，创建一个管道，返回两个fd，一个是用于读的fd，一个是用于写的fd，从w写入，只能从r读出
 	if errno != 0 {

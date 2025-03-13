@@ -134,12 +134,13 @@ func favoriteAddrFamily(network string, laddr, raddr sockaddr, mode string) (fam
 	return syscall.AF_INET6, false
 }
 
+//创建并返回一个网络fd（）
 func internetSocket(ctx context.Context, net string, laddr, raddr sockaddr, sotype, proto int, mode string, ctrlFn func(string, string, syscall.RawConn) error) (fd *netFD, err error) {
 	if (runtime.GOOS == "aix" || runtime.GOOS == "windows" || runtime.GOOS == "openbsd") && mode == "dial" && raddr.isWildcard() {
 		raddr = raddr.toLocal(net)
 	}
 	family, ipv6only := favoriteAddrFamily(net, laddr, raddr, mode)
-	return socket(ctx, net, family, sotype, proto, ipv6only, laddr, raddr, ctrlFn)
+	return socket(ctx, net, family, sotype, proto, ipv6only, laddr, raddr, ctrlFn) //new一个 netFD实例 （网络socket）
 }
 
 func ipToSockaddrInet4(ip IP, port int) (syscall.SockaddrInet4, error) {
@@ -182,13 +183,13 @@ func ipToSockaddrInet6(ip IP, port int, zone string) (syscall.SockaddrInet6, err
 
 func ipToSockaddr(family int, ip IP, port int, zone string) (syscall.Sockaddr, error) {
 	switch family {
-	case syscall.AF_INET:
+	case syscall.AF_INET: //ipv4
 		sa, err := ipToSockaddrInet4(ip, port)
 		if err != nil {
 			return nil, err
 		}
 		return &sa, nil
-	case syscall.AF_INET6:
+	case syscall.AF_INET6: //ipv6
 		sa, err := ipToSockaddrInet6(ip, port, zone)
 		if err != nil {
 			return nil, err

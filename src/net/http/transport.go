@@ -93,11 +93,13 @@ const DefaultMaxIdleConnsPerHost = 2
 // entry. If the idempotency key value is a zero-length slice, the
 // request is treated as idempotent but the header is not sent on the
 // wire.
+// 建立连接，是连接的抽象，内部维护一个连接池
 type Transport struct {
+	//操作空闲连接需要获取锁
 	idleMu       sync.Mutex
 	closeIdle    bool                                // user has requested to close all idle conns
-	idleConn     map[connectMethodKey][]*persistConn // most recently used at end
-	idleConnWait map[connectMethodKey]wantConnQueue  // waiting getConns
+	idleConn     map[connectMethodKey][]*persistConn //空闲连接池，key为协议目标地址等组合
+	idleConnWait map[connectMethodKey]wantConnQueue  //等待空闲连接的队列，基于切片实现，队列大小无限制
 	idleLRU      connLRU
 
 	reqMu       sync.Mutex
@@ -106,9 +108,9 @@ type Transport struct {
 	altMu    sync.Mutex   // guards changing altProto only
 	altProto atomic.Value // of nil or map[string]RoundTripper, key is URI scheme
 
-	connsPerHostMu   sync.Mutex
-	connsPerHost     map[connectMethodKey]int
-	connsPerHostWait map[connectMethodKey]wantConnQueue // waiting getConns
+	connsPerHostMu   sync.Mutex                         //排队等待建立连接需要获取锁
+	connsPerHost     map[connectMethodKey]int           //每个host建立的连接数
+	connsPerHostWait map[connectMethodKey]wantConnQueue //等待建立连接的队列，同样基于切片实现，队列大小无限制
 
 	// Proxy specifies a function to return a proxy for a given
 	// Request. If the function returns a non-nil error, the
@@ -172,18 +174,18 @@ type Transport struct {
 	// tls.Client.
 	// If nil, the default configuration is used.
 	// If non-nil, HTTP/2 support may not be enabled by default.
-	TLSClientConfig *tls.Config
+	TLSClientConfig *tls.Config //tls client用于tls协商的配置
 
 	// TLSHandshakeTimeout specifies the maximum amount of time waiting to
 	// wait for a TLS handshake. Zero means no timeout.
-	TLSHandshakeTimeout time.Duration
+	TLSHandshakeTimeout time.Duration //tls协商的超时时间
 
 	// DisableKeepAlives, if true, disables HTTP keep-alives and
 	// will only use the connection to the server for a single
 	// HTTP request.
 	//
 	// This is unrelated to the similarly named TCP keep-alives.
-	DisableKeepAlives bool
+	DisableKeepAlives bool //是否取消长连接，默认使用长连接
 
 	// DisableCompression, if true, prevents the Transport from
 	// requesting compression with an "Accept-Encoding: gzip"
@@ -193,35 +195,35 @@ type Transport struct {
 	// decoded in the Response.Body. However, if the user
 	// explicitly requested gzip it is not automatically
 	// uncompressed.
-	DisableCompression bool
+	DisableCompression bool //是否取消HTTP压缩
 
 	// MaxIdleConns controls the maximum number of idle (keep-alive)
 	// connections across all hosts. Zero means no limit.
-	MaxIdleConns int
+	MaxIdleConns int //所有host的连接池最大连接数量，默认无穷大
 
 	// MaxIdleConnsPerHost, if non-zero, controls the maximum idle
 	// (keep-alive) connections to keep per-host. If zero,
 	// DefaultMaxIdleConnsPerHost is used.
-	MaxIdleConnsPerHost int
+	MaxIdleConnsPerHost int //每个目标host最大空闲连接数；默认为2（注意默认值）
 
 	// MaxConnsPerHost optionally limits the total number of
 	// connections per host, including connections in the dialing,
 	// active, and idle states. On limit violation, dials will block.
 	//
 	// Zero means no limit.
-	MaxConnsPerHost int
+	MaxConnsPerHost int //对每个host可建立的最大连接数量，0表示不限制
 
 	// IdleConnTimeout is the maximum amount of time an idle
 	// (keep-alive) connection will remain idle before closing
 	// itself.
 	// Zero means no limit.
-	IdleConnTimeout time.Duration
+	IdleConnTimeout time.Duration //连接多少时间没有使用则被关闭
 
 	// ResponseHeaderTimeout, if non-zero, specifies the amount of
 	// time to wait for a server's response headers after fully
 	// writing the request (including its body, if any). This
 	// time does not include the time to read the response body.
-	ResponseHeaderTimeout time.Duration
+	ResponseHeaderTimeout time.Duration //发送完request后等待serve response的时间
 
 	// ExpectContinueTimeout, if non-zero, specifies the amount of
 	// time to wait for a server's first response headers after fully
@@ -230,7 +232,7 @@ type Transport struct {
 	// causes the body to be sent immediately, without
 	// waiting for the server to approve.
 	// This time does not include the time to send the request header.
-	ExpectContinueTimeout time.Duration
+	ExpectContinueTimeout time.Duration //限制客户端在发送一个包含：100-continue的http报文头后，等待收到一个go-ahead响应报文所用的时间。
 
 	// TLSNextProto specifies how the Transport switches to an
 	// alternate protocol (such as HTTP/2) after a TLS ALPN
@@ -242,12 +244,12 @@ type Transport struct {
 	// must return a RoundTripper that then handles the request.
 	// If TLSNextProto is not nil, HTTP/2 support is not enabled
 	// automatically.
-	TLSNextProto map[string]func(authority string, c *tls.Conn) RoundTripper
+	TLSNextProto map[string]func(authority string, c *tls.Conn) RoundTripper //在tls协商带NPN/ALPN的扩展后，transport如何切换到其他协议。指tls之上的协议(next指的就是tls之上的意思)
 
 	// ProxyConnectHeader optionally specifies headers to send to
 	// proxies during CONNECT requests.
 	// To set the header dynamically, see GetProxyConnectHeader.
-	ProxyConnectHeader Header
+	ProxyConnectHeader Header //在CONNECT请求时，配置request的首部信息，可选
 
 	// GetProxyConnectHeader optionally specifies a func to return
 	// headers to send to proxyURL during a CONNECT request to the
@@ -263,17 +265,17 @@ type Transport struct {
 	// header.
 	//
 	// Zero means to use a default limit.
-	MaxResponseHeaderBytes int64
+	MaxResponseHeaderBytes int64 //指定server响应首部的最大字节数
 
 	// WriteBufferSize specifies the size of the write buffer used
 	// when writing to the transport.
 	// If zero, a default (currently 4KB) is used.
-	WriteBufferSize int
+	WriteBufferSize int //写buffer的大小，默认为4096。
 
 	// ReadBufferSize specifies the size of the read buffer used
 	// when reading from the transport.
 	// If zero, a default (currently 4KB) is used.
-	ReadBufferSize int
+	ReadBufferSize int //读bufffer的大小，默认为4096。
 
 	// nextProtoOnce guards initialization of TLSNextProto and
 	// h2transport (via onceSetNextProtoDefaults)
@@ -286,7 +288,7 @@ type Transport struct {
 	// By default, use of any those fields conservatively disables HTTP/2.
 	// To use a custom dialer or TLS config and still attempt HTTP/2
 	// upgrades, set this to true.
-	ForceAttemptHTTP2 bool
+	ForceAttemptHTTP2 bool //是否启用HTTP/2，默认为启用
 }
 
 // A cancelKey is the key of the reqCanceler map.
@@ -499,6 +501,7 @@ func (t *Transport) useRegisteredProtocol(req *Request) bool {
 // alternateRoundTripper returns the alternate RoundTripper to use
 // for this request if the Request's URL scheme requires one,
 // or nil for the normal case of using the Transport.
+// 如果指定path请求有指定的RoundTripper，就返回
 func (t *Transport) alternateRoundTripper(req *Request) RoundTripper {
 	if !t.useRegisteredProtocol(req) {
 		return nil
@@ -542,8 +545,9 @@ func (t *Transport) roundTrip(req *Request) (*Response, error) {
 	cancelKey := cancelKey{origReq}
 	req = setupRewindBody(req)
 
+	//如果这个请求有指定的 RoundTripper
 	if altRT := t.alternateRoundTripper(req); altRT != nil {
-		if resp, err := altRT.RoundTrip(req); err != ErrSkipAltProtocol {
+		if resp, err := altRT.RoundTrip(req); err != ErrSkipAltProtocol { //调用指定的RoundTripper
 			return resp, err
 		}
 		var err error
@@ -552,6 +556,7 @@ func (t *Transport) roundTrip(req *Request) (*Response, error) {
 			return nil, err
 		}
 	}
+
 	if !isHTTP {
 		req.closeBody()
 		return nil, badStringError("unsupported protocol scheme", scheme)
@@ -565,7 +570,7 @@ func (t *Transport) roundTrip(req *Request) (*Response, error) {
 		return nil, errors.New("http: no Host in request URL")
 	}
 
-	for {
+	for { //todo 这里for的目的是啥？
 		select {
 		case <-ctx.Done():
 			req.closeBody()
@@ -585,7 +590,7 @@ func (t *Transport) roundTrip(req *Request) (*Response, error) {
 		// host (for http or https), the http proxy, or the http proxy
 		// pre-CONNECTed to https server. In any case, we'll be ready
 		// to send it requests.
-		pconn, err := t.getConn(treq, cm)
+		pconn, err := t.getConn(treq, cm) //根据请求，获取一个连接
 		if err != nil {
 			t.setReqCanceler(cancelKey, nil)
 			req.closeBody()
@@ -915,6 +920,7 @@ func (t *Transport) maxIdleConnsPerHost() int {
 // If pconn is no longer needed or not in a good state, tryPutIdleConn returns
 // an error explaining why it wasn't registered.
 // tryPutIdleConn does not close pconn. Use putOrCloseIdleConn instead for that.
+// 回收连接
 func (t *Transport) tryPutIdleConn(pconn *persistConn) error {
 	if t.DisableKeepAlives || t.MaxIdleConnsPerHost < 0 {
 		return errKeepAlivesDisabled
@@ -1011,6 +1017,7 @@ func (t *Transport) tryPutIdleConn(pconn *persistConn) error {
 // queueForIdleConn queues w to receive the next idle connection for w.cm.
 // As an optimization hint to the caller, queueForIdleConn reports whether
 // it successfully delivered an already-idle connection.
+// 排队等待空闲连接
 func (t *Transport) queueForIdleConn(w *wantConn) (delivered bool) {
 	if t.DisableKeepAlives {
 		return false
@@ -1032,6 +1039,7 @@ func (t *Transport) queueForIdleConn(w *wantConn) (delivered bool) {
 	// persistConn.idleAt time we're willing to use a cached idle
 	// conn.
 	var oldTime time.Time
+	//如果配置了空闲超时时间，获取到连接需要检测，超时则关闭连接
 	if t.IdleConnTimeout > 0 {
 		oldTime = time.Now().Add(-t.IdleConnTimeout)
 	}
@@ -1047,7 +1055,7 @@ func (t *Transport) queueForIdleConn(w *wantConn) (delivered bool) {
 			// only the wall time (the Round(0)), in case this is a laptop or VM
 			// coming out of suspend with previously cached idle connections.
 			tooOld := !oldTime.IsZero() && pconn.idleAt.Round(0).Before(oldTime)
-			if tooOld {
+			if tooOld { //超时了，关闭连接
 				// Async cleanup. Launch in its own goroutine (as if a
 				// time.AfterFunc called it); it acquires idleMu, which we're
 				// holding, and does a synchronous net.Conn.Close.
@@ -1062,6 +1070,7 @@ func (t *Transport) queueForIdleConn(w *wantConn) (delivered bool) {
 				list = list[:len(list)-1]
 				continue
 			}
+			//分发连接到wantConn
 			delivered = w.tryDeliver(pconn, nil)
 			if delivered {
 				if pconn.alt != nil {
@@ -1090,6 +1099,7 @@ func (t *Transport) queueForIdleConn(w *wantConn) (delivered bool) {
 	if t.idleConnWait == nil {
 		t.idleConnWait = make(map[connectMethodKey]wantConnQueue)
 	}
+	//排队等待空闲连接
 	q := t.idleConnWait[w.key]
 	q.cleanFront()
 	q.pushBack(w)
@@ -1335,12 +1345,13 @@ func (t *Transport) customDialTLS(ctx context.Context, network, addr string) (co
 // specified in the connectMethod. This includes doing a proxy CONNECT
 // and/or setting up TLS.  If this doesn't return an error, the persistConn
 // is ready to write requests to.
+// 尝试获取连接，新建或从池里拿一个复用
 func (t *Transport) getConn(treq *transportRequest, cm connectMethod) (pc *persistConn, err error) {
 	req := treq.Request
 	trace := treq.trace
 	ctx := req.Context()
 	if trace != nil && trace.GetConn != nil {
-		trace.GetConn(cm.addr())
+		trace.GetConn(cm.addr()) // ClientTrace.GetConn
 	}
 
 	w := &wantConn{
@@ -1358,6 +1369,7 @@ func (t *Transport) getConn(treq *transportRequest, cm connectMethod) (pc *persi
 	}()
 
 	// Queue for idle connection.
+	// 没有空闲连接了，排队等待
 	if delivered := t.queueForIdleConn(w); delivered {
 		pc := w.pc
 		// Trace only for HTTP/1.
@@ -1421,7 +1433,7 @@ func (t *Transport) getConn(treq *transportRequest, cm connectMethod) (pc *persi
 // Once w receives permission to dial, it will do so in a separate goroutine.
 func (t *Transport) queueForDial(w *wantConn) {
 	w.beforeDial()
-	if t.MaxConnsPerHost <= 0 {
+	if t.MaxConnsPerHost <= 0 { //如果没有限制最大连接数，直接建立连接
 		go t.dialConnFor(w)
 		return
 	}
@@ -1429,7 +1441,7 @@ func (t *Transport) queueForDial(w *wantConn) {
 	t.connsPerHostMu.Lock()
 	defer t.connsPerHostMu.Unlock()
 
-	if n := t.connsPerHost[w.key]; n < t.MaxConnsPerHost {
+	if n := t.connsPerHost[w.key]; n < t.MaxConnsPerHost { //如果没超过连接数限制，直接建立连接
 		if t.connsPerHost == nil {
 			t.connsPerHost = make(map[connectMethodKey]int)
 		}
@@ -1441,6 +1453,7 @@ func (t *Transport) queueForDial(w *wantConn) {
 	if t.connsPerHostWait == nil {
 		t.connsPerHostWait = make(map[connectMethodKey]wantConnQueue)
 	}
+	//排队等待连接建立
 	q := t.connsPerHostWait[w.key]
 	q.cleanFront()
 	q.pushBack(w)
@@ -1770,7 +1783,7 @@ type persistConnWriter struct {
 }
 
 func (w persistConnWriter) Write(p []byte) (n int, err error) {
-	n, err = w.pc.conn.Write(p)
+	n, err = w.pc.conn.Write(p) //把p的数据写入到conn
 	w.pc.nwrite += int64(n)
 	return
 }
@@ -1779,7 +1792,7 @@ func (w persistConnWriter) Write(p []byte) (n int, err error) {
 // the Conn implements io.ReaderFrom, it can take advantage of optimizations
 // such as sendfile.
 func (w persistConnWriter) ReadFrom(r io.Reader) (n int64, err error) {
-	n, err = io.Copy(w.pc.conn, r)
+	n, err = io.Copy(w.pc.conn, r) //把r的数据复制给 conn
 	w.pc.nwrite += n
 	return
 }
@@ -1804,9 +1817,9 @@ var _ io.ReaderFrom = (*persistConnWriter)(nil)
 //	https://proxy.com|http            https to proxy, http to anywhere after that
 //
 type connectMethod struct {
-	_            incomparable
-	proxyURL     *url.URL // nil for no proxy, else full proxy URL
-	targetScheme string   // "http" or "https"
+	_            incomparable //把结构体标记成 不可比较
+	proxyURL     *url.URL     // 代理url nil for no proxy, else full proxy URL
+	targetScheme string       // "http" or "https"
 	// If proxyURL specifies an http or https proxy, and targetScheme is http (not https),
 	// then targetAddr is not included in the connect method key, because the socket can
 	// be reused for different targetAddr values.
@@ -1840,6 +1853,7 @@ func (cm *connectMethod) scheme() string {
 }
 
 // addr returns the first hop "host:port" to which we need to TCP connect.
+// 下一跳地址，可能是代理ip+port 或 目标ip+port
 func (cm *connectMethod) addr() string {
 	if cm.proxyURL != nil {
 		return canonicalAddr(cm.proxyURL)
@@ -1886,9 +1900,9 @@ type persistConn struct {
 	cacheKey  connectMethodKey
 	conn      net.Conn
 	tlsState  *tls.ConnectionState
-	br        *bufio.Reader       // from conn
-	bw        *bufio.Writer       // to conn
-	nwrite    int64               // bytes written
+	br        *bufio.Reader       // 从 conn 读取的数据
+	bw        *bufio.Writer       // 写给 conn 的数据，底层是 persistConnWriter , bufio.Write是缓存区
+	nwrite    int64               // 写给 conn 的总字节数 bytes written
 	reqch     chan requestAndChan // written by roundTrip; read by readLoop
 	writech   chan writeRequest   // written by roundTrip; read by writeLoop
 	closech   chan struct{}       // closed when conn closed
@@ -2246,7 +2260,7 @@ func (pc *persistConn) readLoopPeekFailLocked(peekErr error) {
 	if pc.closed != nil {
 		return
 	}
-	if n := pc.br.Buffered(); n > 0 {
+	if n := pc.br.Buffered(); n > 0 { // 还有数据可处理
 		buf, _ := pc.br.Peek(n)
 		if is408Message(buf) {
 			pc.closeLocked(errServerClosedIdle)

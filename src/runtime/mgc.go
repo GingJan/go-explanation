@@ -1151,6 +1151,7 @@ func gcBgMarkStartWorkers() {
 
 // gcBgMarkPrepare sets up state for background marking.
 // Mutator assists must not yet be enabled.
+// gcBgMarkPrepare 设置状态，以开始后台标记，
 func gcBgMarkPrepare() {
 	// Background marking will stop when the work queues are empty
 	// and there are no more workers (note that, since this is

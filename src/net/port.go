@@ -12,6 +12,10 @@ package net
 // over 65536 (see https://golang.org/issues/11715). Alas, the parser
 // can't bail early on numbers > 65536. Therefore reasonably large/small
 // numbers are parsed in full and rejected if invalid.
+// 解析传入的 service 字符串，并尝试将其转换为端口号（port），同时判断是否需要进行进一步的查找（needsLookup）。
+// 1.如果 service 是十进制数字（如 "80"），解析为 port = 80，并返回 needsLookup = false，因为不需要查找。
+// 2.如果 service 不是纯数字（如 "http"），那么 needsLookup = true，表示可能需要查找（例如从 /etc/services 或其他系统解析方法）。
+// 3.如果 service 解析出来的数字超过 65535，则认为是无效端口。
 func parsePort(service string) (port int, needsLookup bool) {
 	if service == "" {
 		// Lock in the legacy behavior that an empty string

@@ -55,6 +55,8 @@ const (
 // some miscellany) and initializes scanning-related state.
 //
 // The world must be stopped.
+// gcMarkRootPrepare 把根对象的扫描工作入队（如栈，全局对象等），初始化扫描相关的状态
+// 调用本函数前，必须STW
 func gcMarkRootPrepare() {
 	assertWorldStopped()
 

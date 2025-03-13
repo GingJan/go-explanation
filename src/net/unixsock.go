@@ -19,6 +19,7 @@ import (
 // and UnixListener don't work for "unixgram" and "unixpacket".
 
 // UnixAddr represents the address of a Unix domain socket end point.
+// unix地址（相对 UDPAddr TCPAddr ）
 type UnixAddr struct {
 	Name string
 	Net  string

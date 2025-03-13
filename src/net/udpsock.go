@@ -21,6 +21,7 @@ import (
 // implemented.
 
 // UDPAddr represents the address of a UDP end point.
+// UDP地址，（相对 TCPAddr ）
 type UDPAddr struct {
 	IP   IP
 	Port int
@@ -119,8 +120,9 @@ func (addrPortUDPAddr) Network() string { return "udp" }
 
 // UDPConn is the implementation of the Conn and PacketConn interfaces
 // for UDP network connections.
-type UDPConn struct {
-	conn
+// 实现了 Conn 和 PacketConn 接口
+type UDPConn struct { //UDPConn 实现了 PacketConn 接口
+	conn //实现了 Conn 接口
 }
 
 // SyscallConn returns a raw network connection.
@@ -133,6 +135,7 @@ func (c *UDPConn) SyscallConn() (syscall.RawConn, error) {
 }
 
 // ReadFromUDP acts like ReadFrom but returns a UDPAddr.
+// 给外部调用，返回读取数据字节数，对端ip+port，错误信息
 func (c *UDPConn) ReadFromUDP(b []byte) (n int, addr *UDPAddr, err error) {
 	// This function is designed to allow the caller to control the lifetime
 	// of the returned *UDPAddr and thereby prevent an allocation.
@@ -142,6 +145,7 @@ func (c *UDPConn) ReadFromUDP(b []byte) (n int, addr *UDPAddr, err error) {
 }
 
 // readFromUDP implements ReadFromUDP.
+// b读取的数据，addr 对端地址
 func (c *UDPConn) readFromUDP(b []byte, addr *UDPAddr) (int, *UDPAddr, error) {
 	if !c.ok() {
 		return 0, nil, syscall.EINVAL
@@ -283,6 +287,7 @@ func newUDPConn(fd *netFD) *UDPConn { return &UDPConn{conn{fd}} }
 // If laddr is nil, a local address is automatically chosen.
 // If the IP field of raddr is nil or an unspecified IP address, the
 // local system is assumed.
+// 外部调用，请求建立udp连接（客户端侧调用）
 func DialUDP(network string, laddr, raddr *UDPAddr) (*UDPConn, error) {
 	switch network {
 	case "udp", "udp4", "udp6":
@@ -309,6 +314,7 @@ func DialUDP(network string, laddr, raddr *UDPAddr) (*UDPConn, error) {
 // except multicast IP addresses.
 // If the Port field of laddr is 0, a port number is automatically
 // chosen.
+// 给外部服务端侧调用，返回 UDPConn 实例，外部可通过该实例进行远程请求的读取和写入
 func ListenUDP(network string, laddr *UDPAddr) (*UDPConn, error) {
 	switch network {
 	case "udp", "udp4", "udp6":
@@ -319,7 +325,7 @@ func ListenUDP(network string, laddr *UDPAddr) (*UDPConn, error) {
 		laddr = &UDPAddr{}
 	}
 	sl := &sysListener{network: network, address: laddr.String()}
-	c, err := sl.listenUDP(context.Background(), laddr)
+	c, err := sl.listenUDP(context.Background(), laddr) //创建 UDPConn 实例
 	if err != nil {
 		return nil, &OpError{Op: "listen", Net: network, Source: nil, Addr: laddr.opAddr(), Err: err}
 	}

@@ -43,13 +43,14 @@ func (a *UDPAddr) toLocal(net string) sockaddr {
 	return &UDPAddr{loopbackIP(net), a.Port, a.Zone}
 }
 
+//b存放读取的数据，返回 UDPAddr 实例对端地址
 func (c *UDPConn) readFrom(b []byte, addr *UDPAddr) (int, *UDPAddr, error) {
 	var n int
 	var err error
 	switch c.fd.family {
-	case syscall.AF_INET:
+	case syscall.AF_INET: //ipv4
 		var from syscall.SockaddrInet4
-		n, err = c.fd.readFromInet4(b, &from)
+		n, err = c.fd.readFromInet4(b, &from) //b存放读取的数据，from对端地址
 		if err == nil {
 			ip := from.Addr // copy from.Addr; ip escapes, so this line allocates 4 bytes
 			*addr = UDPAddr{IP: ip[:], Port: from.Port}
@@ -210,6 +211,7 @@ func (sd *sysDialer) dialUDP(ctx context.Context, laddr, raddr *UDPAddr) (*UDPCo
 	return newUDPConn(fd), nil
 }
 
+//创建 UDPConn 实例，udp是不需要监听器的
 func (sl *sysListener) listenUDP(ctx context.Context, laddr *UDPAddr) (*UDPConn, error) {
 	fd, err := internetSocket(ctx, sl.network, laddr, nil, syscall.SOCK_DGRAM, 0, "listen", sl.ListenConfig.Control)
 	if err != nil {

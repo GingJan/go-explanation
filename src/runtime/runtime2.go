@@ -163,6 +163,7 @@ const (
 // but on the contention path they sleep in the kernel.
 // A zeroed Mutex is unlocked (no need to initialize each lock).
 // Initialization is helpful for static lock ranking, but not required.
+// 互斥锁，该锁会导致OS线程阻塞（而不是G阻塞），被用于runtime包
 type mutex struct {
 	// Empty struct if lock ranking is disabled, otherwise includes the lock rank
 	lockRankStruct
@@ -192,6 +193,7 @@ type mutex struct {
 //
 // notesleep/notetsleep are generally called on g0,
 // notetsleepg is similar to notetsleep but is called on user g.
+// 轻量级同步对象，用于 goroutine 间的 信号传递
 // 在某一次性事件上休眠或唤醒
 // 在调用notesleep和notewakeup前，必须先调用noteclear初始化Note
 // 然后，确保只有一个线程调用notesleep并且只有一个线程调用notewakeup（一次性）

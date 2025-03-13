@@ -217,7 +217,7 @@ type mheap struct {
 	unused *specialfinalizer // never set, just here to force the specialfinalizer type into DWARF
 }
 
-var mheap_ mheap
+var mheap_ mheap //go程序的内存页管理器
 
 // A heapArena stores metadata for a heap arena. heapArenas are stored
 // outside of the Go heap and accessed via the mheap_.arenas index.

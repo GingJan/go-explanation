@@ -350,8 +350,8 @@ func (t *Type) Pkg() *Pkg {
 
 // Map contains Type fields specific to maps.
 type Map struct {
-	Key  *Type // Key type
-	Elem *Type // Val (elem) type
+	Key  *Type // key的类型
+	Elem *Type // val元素的类型
 
 	Bucket *Type // internal struct type representing a hash bucket
 	Hmap   *Type // internal struct type representing the Hmap (map header object)

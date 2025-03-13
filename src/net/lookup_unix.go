@@ -75,6 +75,7 @@ func (r *Resolver) dial(ctx context.Context, network, server string) (Conn, erro
 	return c, nil
 }
 
+//解析主机
 func (r *Resolver) lookupHost(ctx context.Context, host string) (addrs []string, err error) {
 	order := systemConf().hostLookupOrder(r, host)
 	if !r.preferGo() && order == hostLookupCgo {
@@ -103,6 +104,7 @@ func (r *Resolver) lookupIP(ctx context.Context, network, host string) (addrs []
 	return ips, err
 }
 
+//使用对应解析器（go和cgo解析器）进一步解析service的端口
 func (r *Resolver) lookupPort(ctx context.Context, network, service string) (int, error) {
 	if !r.preferGo() && systemConf().canUseCgo() {
 		if port, err, ok := cgoLookupPort(ctx, network, service); ok {

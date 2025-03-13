@@ -37,7 +37,7 @@ var ErrClosedPipe = errors.New("io: read/write on closed pipe")
 
 // A pipe is the shared pipe structure underlying PipeReader and PipeWriter.
 type pipe struct {
-	wrMu sync.Mutex // Serializes Write operations
+	wrMu sync.Mutex // 对写操作进行串行化处理 Serializes Write operations
 	wrCh chan []byte
 	rdCh chan int
 
@@ -56,7 +56,7 @@ func (p *pipe) read(b []byte) (n int, err error) {
 
 	select {
 	case bw := <-p.wrCh:
-		nr := copy(b, bw)
+		nr := copy(b, bw) //bw的数据复制到b
 		p.rdCh <- nr
 		return nr, nil
 	case <-p.done:
@@ -123,6 +123,7 @@ func (p *pipe) writeCloseError() error {
 }
 
 // A PipeReader is the read half of a pipe.
+// PipeWriter实例是管道的另一端，读入部分/读端
 type PipeReader struct {
 	p *pipe
 }
@@ -132,6 +133,7 @@ type PipeReader struct {
 // arrives or the write end is closed.
 // If the write end is closed with an error, that error is
 // returned as err; otherwise err is EOF.
+//把r.wrch里的数据读取到data里
 func (r *PipeReader) Read(data []byte) (n int, err error) {
 	return r.p.read(data)
 }
@@ -152,6 +154,7 @@ func (r *PipeReader) CloseWithError(err error) error {
 }
 
 // A PipeWriter is the write half of a pipe.
+// PipeWriter实例是管道的另一端，写入部分/写端
 type PipeWriter struct {
 	p *pipe
 }
@@ -196,6 +199,7 @@ func (w *PipeWriter) CloseWithError(err error) error {
 // It is safe to call Read and Write in parallel with each other or with Close.
 // Parallel calls to Read and parallel calls to Write are also safe:
 // the individual calls will be gated sequentially.
+// 创建一个管道pipe实例，返回管道的读端，写端
 func Pipe() (*PipeReader, *PipeWriter) {
 	p := &pipe{
 		wrCh: make(chan []byte),

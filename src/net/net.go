@@ -36,15 +36,30 @@ The Listen function creates servers:
 		go handleConnection(conn)
 	}
 
+域名解析
 Name Resolution
 
+解析域名的方式，是使用像Dial这种函数间接解析，还是使用像LookupHost和LookupAddr函数的直接解析，都因操作系统而定
 The method for resolving domain names, whether indirectly with functions like Dial
 or directly with functions like LookupHost and LookupAddr, varies by operating system.
 
+在Unix系统上，域名解析器在解析域名时有两个选项可选，一是使用纯GO实现的解析器，
+该解析器直接发送一个DNS请求到 /etc/resolv.conf 文件里列出的DNS服务器。
+第二选项是使用基于cgo的解析器，该解析器调用C的库函数，如getaddrinfo和getnameinfo
 On Unix systems, the resolver has two options for resolving names.
 It can use a pure Go resolver that sends DNS requests directly to the servers
 listed in /etc/resolv.conf, or it can use a cgo-based resolver that calls C
 library routines such as getaddrinfo and getnameinfo.
+
+默认情况下，使用Go解析器，因此一个DNS请求只会使用一个goroutine，而一个C调用会占用一个系统线程
+当cgo可用时，在以下情况则直接使用cgo：
+OSX系统（该系统不允许程序直接发出DNS请求）
+当LOCALDOMAIN环境变量设置了（即便值为空）
+当 RES_OPTIONS 或 HOSTALIASES 环境变量非空时
+当 ASR_CONFIG 环境变量非空
+当 /etc/resolv.conf 或 /etc/nsswitch.conf 文件里指定的特性在Go解析器里没实现时
+当域名以.local结尾
+当域名时mDNS域名时
 
 By default the pure Go resolver is used, because a blocked DNS request consumes
 only a goroutine, while a blocked C call consumes an operating system thread.
@@ -57,14 +72,14 @@ when /etc/resolv.conf or /etc/nsswitch.conf specify the use of features that the
 Go resolver does not implement, and when the name being looked up ends in .local
 or is an mDNS name.
 
-The resolver decision can be overridden by setting the netdns value of the
-GODEBUG environment variable (see package runtime) to go or cgo, as in:
+可通过GODEBUG环境变量更改netdns的值来决定使用哪个解析器，如下所示：
+export GODEBUG=netdns=go    # 强制使用Go解析器
+export GODEBUG=netdns=cgo   # 强制使用cgo解析器
 
-	export GODEBUG=netdns=go    # force pure Go resolver
-	export GODEBUG=netdns=cgo   # force cgo resolver
-
+也可以通过在构建Go源码树时，通过设置build tag为 netgo 或 netcgo来指定解析器
 The decision can also be forced while building the Go source tree
 by setting the netgo or netcgo build tag.
+
 
 A numeric netdns setting, as in GODEBUG=netdns=1, causes the resolver
 to print debugging information about its decisions.
@@ -102,7 +117,7 @@ var (
 // The two methods Network and String conventionally return strings
 // that can be passed as the arguments to Dial, but the exact form
 // and meaning of the strings is up to the implementation.
-// Addr 表示网络和端地址
+// Addr 表示网络端点的地址
 type Addr interface {
 	Network() string // 网络类型，例如tcp、udp
 	String() string  // 地址的字符串形式（例如, "192.0.2.1:25", "[2001:db8::1]:80"）
@@ -111,26 +126,33 @@ type Addr interface {
 // Conn is a generic stream-oriented network connection.
 //
 // Multiple goroutines may invoke methods on a Conn simultaneously.
+// Conn 接口是面向流的网络连接（TCP）
+// 可能会有多个goroutine同时调用Conn的方法
 type Conn interface {
 	// Read reads data from the connection.
 	// Read can be made to time out and return an error after a fixed
 	// time limit; see SetDeadline and SetReadDeadline.
-	// Read 从网络连接里读取数据，可设为超时时长并在超时后返回错误
+	// Read 从网络连接里读取数据到b，可设为超时时长并在超时后返回错误（查看SetDeadline和SetReadDeadline）
+	// 如果是http请求的连接，移步@see net.conn.Read()，如果是https，看tls.conn.Read()
 	Read(b []byte) (n int, err error)
 
 	// Write writes data to the connection.
 	// Write can be made to time out and return an error after a fixed
 	// time limit; see SetDeadline and SetWriteDeadline.
+	// 把b写入到连接Conn里
 	Write(b []byte) (n int, err error)
 
 	// Close closes the connection.
 	// Any blocked Read or Write operations will be unblocked and return errors.
+	// 关闭连接，任何当前阻塞在 Read 和 Write 的操作都会解除并返回错误
 	Close() error
 
 	// LocalAddr returns the local network address, if known.
+	// 返回本地ip地址
 	LocalAddr() Addr
 
 	// RemoteAddr returns the remote network address, if known.
+	// 返回远程对端ip地址
 	RemoteAddr() Addr
 
 	// SetDeadline sets the read and write deadlines associated
@@ -154,11 +176,13 @@ type Conn interface {
 	// the deadline after successful Read or Write calls.
 	//
 	// A zero value for t means I/O operations will not time out.
+	// 设置读写超时时间，相当于同时调用了 SetReadDeadline 和 SetWriteDeadline
 	SetDeadline(t time.Time) error
 
 	// SetReadDeadline sets the deadline for future Read calls
 	// and any currently-blocked Read call.
 	// A zero value for t means Read will not time out.
+	// 设置读超时时间，如果超时后还没读取到数据，则 Read() 返回 timeout 错误。
 	SetReadDeadline(t time.Time) error
 
 	// SetWriteDeadline sets the deadline for future Write calls
@@ -166,24 +190,25 @@ type Conn interface {
 	// Even if write times out, it may return n > 0, indicating that
 	// some of the data was successfully written.
 	// A zero value for t means Write will not time out.
+	// 设置写超时时间，如果超时后数据还没写入，则 Write() 返回 timeout 错误。
 	SetWriteDeadline(t time.Time) error
 }
 
+//实现了 Conn 接口
 type conn struct {
-	fd *netFD
+	fd *netFD //跟具体OS有关
 }
 
+//连接是否已关闭
 func (c *conn) ok() bool { return c != nil && c.fd != nil }
-
-// Implementation of the Conn interface.
 
 // Read implements the Conn Read method.
 func (c *conn) Read(b []byte) (int, error) {
 	if !c.ok() {
 		return 0, syscall.EINVAL
 	}
-	n, err := c.fd.Read(b)
-	if err != nil && err != io.EOF {//出现系统层级错误
+	n, err := c.fd.Read(b)           //如果连接上没有数据请求，则阻塞
+	if err != nil && err != io.EOF { //出现系统层级错误
 		err = &OpError{Op: "read", Net: c.fd.net, Source: c.fd.laddr, Addr: c.fd.raddr, Err: err}
 	}
 	return n, err
@@ -202,11 +227,12 @@ func (c *conn) Write(b []byte) (int, error) {
 }
 
 // Close closes the connection.
+// 关闭连接
 func (c *conn) Close() error {
-	if !c.ok() {//如果底层的fd已关闭
+	if !c.ok() { //如果底层的fd已关闭
 		return syscall.EINVAL
 	}
-	err := c.fd.Close()
+	err := c.fd.Close() //关闭底层 net.netFD
 	if err != nil {
 		err = &OpError{Op: "close", Net: c.fd.net, Source: c.fd.laddr, Addr: c.fd.raddr, Err: err}
 	}
@@ -308,6 +334,8 @@ func (c *conn) File() (f *os.File, err error) {
 // PacketConn is a generic packet-oriented network connection.
 //
 // Multiple goroutines may invoke methods on a PacketConn simultaneously.
+// PacketConn接口是面向包的通用网络连接
+// 可能会有多个goroutine同时调用PacketConn的方法
 type PacketConn interface {
 	// ReadFrom reads a packet from the connection,
 	// copying the payload into p. It returns the number of
@@ -383,6 +411,7 @@ func listenerBacklog() int {
 // A Listener is a generic network listener for stream-oriented protocols.
 //
 // Multiple goroutines may invoke methods on a Listener simultaneously.
+// 面向流协议（TCP）的通用网络listener
 type Listener interface {
 	// Accept waits for and returns the next connection to the listener.
 	Accept() (Conn, error)
@@ -395,10 +424,10 @@ type Listener interface {
 	Addr() Addr
 }
 
-// An Error represents a network error.
+// 用于网络错误的Error接口
 type Error interface {
-	error
-	Timeout() bool // Is the error a timeout?
+	error          //继承 builtin.error
+	Timeout() bool // 是否超时错误
 
 	// Deprecated: Temporary errors are not well-defined.
 	// Most "temporary" errors are timeouts, and the few exceptions are surprising.
@@ -701,6 +730,9 @@ type buffersWriter interface {
 type Buffers [][]byte
 
 var (
+	// 利用空白标识符 _ 来验证 Buffers 类型是否满足 io.WriterTo 和 io.Reader 接口的要求。
+	// 如果 Buffers 没有实现这些接口，编译器会给出错误提示。
+	// 这是一种常见的编程习惯，用来确保类型符合预期的接口要求。
 	_ io.WriterTo = (*Buffers)(nil)
 	_ io.Reader   = (*Buffers)(nil)
 )

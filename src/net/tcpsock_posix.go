@@ -136,18 +136,18 @@ func spuriousENOTAVAIL(err error) bool {
 func (ln *TCPListener) ok() bool { return ln != nil && ln.fd != nil }
 
 func (ln *TCPListener) accept() (*TCPConn, error) {
-	fd, err := ln.fd.accept()
+	fd, err := ln.fd.accept() //如果有新连接请求，这里不会阻塞，而是返回
 	if err != nil {
 		return nil, err
 	}
 	tc := newTCPConn(fd)
-	if ln.lc.KeepAlive >= 0 {//启用keepalive并且设置tcp心跳包的发送时间间隔
-		setKeepAlive(fd, true)//启用 TCP Keep-Alive
+	if ln.lc.KeepAlive >= 0 { //启用keepalive并且设置tcp心跳包的发送时间间隔
+		setKeepAlive(fd, true) //启用 TCP Keep-Alive
 		ka := ln.lc.KeepAlive
 		if ln.lc.KeepAlive == 0 {
 			ka = defaultTCPKeepAlive
 		}
-		setKeepAlivePeriod(fd, ka)//设置 TCP Keep-Alive 探测报文（心跳包）发送间隔
+		setKeepAlivePeriod(fd, ka) //设置 TCP Keep-Alive 探测报文（心跳包）发送间隔
 	}
 	return tc, nil
 }
@@ -164,10 +164,12 @@ func (ln *TCPListener) file() (*os.File, error) {
 	return f, nil
 }
 
+//通过 sysListener 创建一个专用于tcp的监听器
 func (sl *sysListener) listenTCP(ctx context.Context, laddr *TCPAddr) (*TCPListener, error) {
-	fd, err := internetSocket(ctx, sl.network, laddr, nil, syscall.SOCK_STREAM, 0, "listen", sl.ListenConfig.Control)
+	fd, err := internetSocket(ctx, sl.network, laddr, nil, syscall.SOCK_STREAM, 0, "listen", sl.ListenConfig.Control) //创建并返回一个网络fd
 	if err != nil {
 		return nil, err
 	}
+
 	return &TCPListener{fd: fd, lc: sl.ListenConfig}, nil
 }

@@ -63,11 +63,13 @@ import (
 
 const (
 	// Maximum number of key/elem pairs a bucket can hold.
+	// 每个bucket桶可以装的kv对
 	bucketCntBits = 3
 	bucketCnt     = 1 << bucketCntBits
 
 	// Maximum average load of a bucket that triggers growth is 6.5.
 	// Represent as loadFactorNum/loadFactorDen, to allow integer math.
+	// 装载因子
 	loadFactorNum = 13
 	loadFactorDen = 2
 
@@ -98,9 +100,9 @@ const (
 	minTopHash     = 5 // minimum tophash for a normal filled cell.
 
 	// flags
-	iterator     = 1 // there may be an iterator using buckets
-	oldIterator  = 2 // there may be an iterator using oldbuckets
-	hashWriting  = 4 // a goroutine is writing to the map
+	iterator     = 1 // 当前bucket正被遍历 there may be an iterator using buckets
+	oldIterator  = 2 // 当前oldbucket正被遍历 there may be an iterator using oldbuckets
+	hashWriting  = 4 // 当前有一个goroutine正在map上写数据 a goroutine is writing to the map
 	sameSizeGrow = 8 // the current map growth is to a new map of the same size
 
 	// sentinel bucket ID for iterator checks
@@ -117,16 +119,25 @@ func isEmpty(x uint8) bool {
 type hmap struct {
 	// Note: the format of the hmap is also encoded in cmd/compile/internal/reflectdata/reflect.go.
 	// Make sure this stays in sync with the compiler's definition.
-	count     int // # live cells == size of map.  Must be first (used by len() builtin)
-	flags     uint8
-	B         uint8  // log_2 of # of buckets (can hold up to loadFactor * 2^B items)
+	// 代表哈希表中的元素个数，调用len(map)时，返回的就是该字段值。
+	count int // # live cells == size of map.  Must be first (used by len() builtin)
+	// 状态标志，下文常量中会解释四种状态位含义。
+	flags uint8 // iterator oldIterator hashWriting sameSizeGrow
+	// buckets（桶）的对数log_2，B=3时，说明有2^3=8个bucket
+	B uint8 // log_2 of # of buckets (can hold up to loadFactor * 2^B items)
+	// 溢出桶的大概数量
 	noverflow uint16 // approximate number of overflow buckets; see incrnoverflow for details
-	hash0     uint32 // hash seed
+	// 哈希种子
+	hash0 uint32 // hash seed
 
-	buckets    unsafe.Pointer // array of 2^B Buckets. may be nil if count==0.
+	// 指向buckets数组的指针，数组大小为2^B，如果元素个数为0，它为nil。
+	buckets unsafe.Pointer // array of 2^B Buckets. may be nil if count==0.
+	// 如果发生扩容，oldbuckets是指向老的buckets数组的指针，老的buckets数组大小是新的buckets的1/2;非扩容状态下，它为nil。
 	oldbuckets unsafe.Pointer // previous bucket array of half the size, non-nil only when growing
-	nevacuate  uintptr        // progress counter for evacuation (buckets less than this have been evacuated)
+	// 表示扩容进度，小于此地址的buckets代表已搬迁完成。
+	nevacuate uintptr // progress counter for evacuation (buckets less than this have been evacuated)
 
+	// 这个字段是为了优化GC扫描而设计的。当key和value均不包含指针，并且都可以inline时使用。extra是指向mapextra类型的指针。
 	extra *mapextra // optional fields
 }
 
@@ -152,13 +163,27 @@ type bmap struct {
 	// tophash generally contains the top byte of the hash value
 	// for each key in this bucket. If tophash[0] < minTopHash,
 	// tophash[0] is a bucket evacuation state instead.
-	tophash [bucketCnt]uint8
+	// len为8的数组
+	// 用来快速定位key是否在这个bmap中
+	// 桶的槽位数组，一个桶最多8个槽位，如果key所在的槽位在tophash中，则代表该key在这个桶中
+	tophash [bucketCnt]uint8 //存放key hash后的高8位
 	// Followed by bucketCnt keys and then bucketCnt elems.
 	// NOTE: packing all the keys together and then all the elems together makes the
 	// code a bit more complicated than alternating key/elem/key/elem/... but it allows
 	// us to eliminate padding which would be needed for, e.g., map[int64]int8.
 	// Followed by an overflow pointer.
 }
+
+//但这只是表面(src/runtime/hashmap.go)的结构，编译期间会给它加料，动态地创建一个新的结构：
+/*
+type bmap struct {
+	topbits  [8]uint8
+	keys     [8]keytype
+	values   [8]valuetype
+	pad      uintptr
+	overflow uintptr // 溢出桶
+}
+*/
 
 // A hash iteration structure.
 // If you modify hiter, also change cmd/compile/internal/reflectdata/reflect.go
@@ -1080,6 +1105,7 @@ func hashGrow(t *maptype, h *hmap) {
 	// by growWork() and evacuate().
 }
 
+// overLoadFactor reports whether count items placed in 1<<B buckets is over loadFactor.
 // overLoadFactor reports whether count items placed in 1<<B buckets is over loadFactor.
 func overLoadFactor(count int, B uint8) bool {
 	return count > bucketCnt && uintptr(count) > loadFactorNum*(bucketShift(B)/loadFactorDen)

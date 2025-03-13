@@ -11,6 +11,7 @@ import (
 	"syscall"
 )
 
+// negale算法
 func setNoDelay(fd *netFD, noDelay bool) error {
 	err := fd.pfd.SetsockoptInt(syscall.IPPROTO_TCP, syscall.TCP_NODELAY, boolint(noDelay))
 	runtime.KeepAlive(fd)

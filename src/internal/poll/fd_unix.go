@@ -154,11 +154,13 @@ const maxRW = 1 << 30
 
 // Read implements io.Reader.
 // 尝试从fd里读取数据，当无数据且是非阻塞时，则会polling，并挂起当前g
+// 用于tcp连接的读取，底层调用系统的read函数
 func (fd *FD) Read(p []byte) (int, error) {
 	if err := fd.readLock(); err != nil {
 		return 0, err
 	}
 	defer fd.readUnlock()
+
 	if len(p) == 0 {
 		// If the caller wanted a zero byte read, return immediately
 		// without trying (but after acquiring the readLock).
@@ -173,6 +175,7 @@ func (fd *FD) Read(p []byte) (int, error) {
 	if fd.IsStream && len(p) > maxRW { //如果是TCP，则一次调用最大返回数据量是maxRW
 		p = p[:maxRW]
 	}
+
 	for {
 		n, err := ignoringEINTRIO(syscall.Read, fd.Sysfd, p) //非阻塞模式，调用底层的系统read后，立即返回。这里尝试调用一次，看看该fd是否有数据可读了
 		if err != nil {                                      //未有数据可读，则进入polling
@@ -218,7 +221,8 @@ func (fd *FD) Pread(p []byte, off int64) (int, error) {
 }
 
 // ReadFrom wraps the recvfrom network call.
-// ReadFrom 对 底层系统recvfrom函数 的封装
+// ReadFrom 对 底层系统 recvfrom 函数 的封装
+// 用于udp的读取，底层调用系统的 recvfrom 函数
 func (fd *FD) ReadFrom(p []byte) (int, syscall.Sockaddr, error) {
 	if err := fd.readLock(); err != nil { //阻塞获取读锁
 		return 0, nil, err
@@ -235,7 +239,7 @@ func (fd *FD) ReadFrom(p []byte) (int, syscall.Sockaddr, error) {
 			}
 			n = 0
 			if err == syscall.EAGAIN && fd.pd.pollable() { //暂无数据可读，则进行poll等待
-				if err = fd.pd.waitRead(fd.isFile); err == nil {
+				if err = fd.pd.waitRead(fd.isFile); err == nil { //阻塞在此，g被挂起
 					continue
 				}
 			}
@@ -246,6 +250,7 @@ func (fd *FD) ReadFrom(p []byte) (int, syscall.Sockaddr, error) {
 }
 
 // ReadFromInet4 wraps the recvfrom network call for IPv4.
+// 封装了ipv4的recvfrom系统调用，p存放读取的数据，from对端地址
 func (fd *FD) ReadFromInet4(p []byte, from *syscall.SockaddrInet4) (int, error) {
 	if err := fd.readLock(); err != nil {
 		return 0, err
@@ -255,7 +260,7 @@ func (fd *FD) ReadFromInet4(p []byte, from *syscall.SockaddrInet4) (int, error) 
 		return 0, err
 	}
 	for {
-		n, err := unix.RecvfromInet4(fd.Sysfd, p, 0, from)
+		n, err := unix.RecvfromInet4(fd.Sysfd, p, 0, from) //ipv4的系统调用
 		if err != nil {
 			if err == syscall.EINTR {
 				continue
@@ -617,27 +622,28 @@ func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 		return -1, nil, "", err
 	}
 	for {
-		s, rsa, errcall, err := accept(fd.Sysfd)
-		if err == nil { //当有新连接时，走这里
-			return s, rsa, "", err
+		newClientFd, rsa, errcall, err := accept(fd.Sysfd) //先尝试看下有无连接建立请求，s是新的client_fd
+		if err == nil {                                    //当有新连接时，走这里
+			return newClientFd, rsa, "", err
 		}
+
 		switch err {
 		case syscall.EINTR:
-			//系统中断
-			continue
-		case syscall.EAGAIN:
-			//非阻塞模式，当无连接时走这里
-			if fd.pd.pollable() { //是可poll的
-				//当没有新的连接请求时，则当前协程进入gopark
-				if err = fd.pd.waitRead(fd.isFile); err == nil { //g阻塞在这
+			//系统中断，如果在 accept 阻塞期间，进程接收到某个信号（例如 SIGINT, SIGTERM 等），则 accept 调用会被中断，并返回 EINTR。
+			continue //一般来说，应用程序可以重新调用 accept 来重试。
 
-					//网络有io，此时本协程被唤醒，从这里开始执行，并继续执行后续逻辑，continue回到上面accept，获取到一个新连接
+		case syscall.EAGAIN:
+			//非阻塞模式，当 listen_fd 被设置为非阻塞（即套接字标记了 O_NONBLOCK），并且没有新连接可用时，accept 会返回 -1，并将 errno 设置为 EAGAIN（或 EWOULDBLOCK，这两个错误码在某些系统中是等效的）。
+			if fd.pd.pollable() { //本fd（listen_fd）是可poll的，也即使用了epoll
+				//当没有新的连接请求时，则当前g进入gopark，被挂起，直到有事件唤醒
+				if err = fd.pd.waitRead(fd.isFile); err == nil { //调用Accept函数的g阻塞在这
+					//网络有新连接请求事件，此时本G被唤醒，从这里恢复执行，并继续执行后续逻辑，continue回到上面accept，获取到一个新连接
 					continue
 				}
 			}
 		case syscall.ECONNABORTED:
 			// 在backlog队列里等待被accept的socket还没来得及被accept就关闭了，
-			// 此时就会出现本错误走到本路径
+			// 此时就会出现本错误 走到本路径
 			// This means that a socket on the listen
 			// queue was closed before we Accept()ed it;
 			// it's a silly error, so try again.
@@ -647,7 +653,7 @@ func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 	}
 }
 
-// Seek wraps syscall.Seek.
+// Seek 封装了 syscall.Seek.
 func (fd *FD) Seek(offset int64, whence int) (int64, error) {
 	if err := fd.incref(); err != nil {
 		return 0, err
@@ -656,7 +662,7 @@ func (fd *FD) Seek(offset int64, whence int) (int64, error) {
 	return syscall.Seek(fd.Sysfd, offset, whence)
 }
 
-// ReadDirent wraps syscall.ReadDirent.
+// ReadDirent 封装了 syscall.ReadDirent.
 // We treat this like an ordinary system call rather than a call
 // that tries to fill the buffer.
 func (fd *FD) ReadDirent(buf []byte) (int, error) {
@@ -679,7 +685,7 @@ func (fd *FD) ReadDirent(buf []byte) (int, error) {
 	}
 }
 
-// Fchmod wraps syscall.Fchmod.
+// Fchmod 封装了 syscall.Fchmod.， chmod命令
 func (fd *FD) Fchmod(mode uint32) error {
 	if err := fd.incref(); err != nil {
 		return err
@@ -690,7 +696,7 @@ func (fd *FD) Fchmod(mode uint32) error {
 	})
 }
 
-// Fchdir wraps syscall.Fchdir.
+// Fchdir 封装了 syscall.Fchdir. chdir命令
 func (fd *FD) Fchdir() error {
 	if err := fd.incref(); err != nil {
 		return err
@@ -699,7 +705,7 @@ func (fd *FD) Fchdir() error {
 	return syscall.Fchdir(fd.Sysfd)
 }
 
-// Fstat wraps syscall.Fstat
+// Fstat 封装了 syscall.Fstat，stat命令
 func (fd *FD) Fstat(s *syscall.Stat_t) error {
 	if err := fd.incref(); err != nil {
 		return err

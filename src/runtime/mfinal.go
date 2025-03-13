@@ -477,7 +477,7 @@ okarg:
 // 	runtime.KeepAlive(p)
 // 	// 从这里开始不会再使用p了
 //
-// 当不调用 KeepAlive 时，finalizer可在 syscall.Read 的启动时运行，并且在 syscall.Read 实际调用底层 系统调用 时关闭文件描述符
+// 如果没有 KeepAlive 函数的调用，finalizer 可在 syscall.Read 的启动时运行，并且在 syscall.Read 实际调用底层系统调用时关闭文件描述符
 func KeepAlive(x any) {
 	// Introduce a use of x that the compiler can't eliminate.
 	// This makes sure x is alive on entry. We need x to be alive

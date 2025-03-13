@@ -356,7 +356,7 @@ func escape(s string, mode encoding) string {
 // URL's String method uses the EscapedPath method to obtain the path. See the
 // EscapedPath method for more details.
 type URL struct {
-	Scheme      string
+	Scheme      string    // http或https等
 	Opaque      string    // encoded opaque data
 	User        *Userinfo // username and password information
 	Host        string    // host or host:port

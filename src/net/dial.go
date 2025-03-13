@@ -14,7 +14,7 @@ import (
 // defaultTCPKeepAlive is a default constant value for TCPKeepAlive times
 // See golang.org/issue/31510
 const (
-	defaultTCPKeepAlive = 15 * time.Second//默认的TCP保活心跳包发送间隔
+	defaultTCPKeepAlive = 15 * time.Second //默认的TCP保活心跳包发送间隔
 )
 
 // A Dialer contains options for connecting to an address.
@@ -127,7 +127,7 @@ func (d *Dialer) deadline(ctx context.Context, now time.Time) (earliest time.Tim
 		earliest = now.Add(d.Timeout)
 	}
 	if d, ok := ctx.Deadline(); ok {
-		earliest = minNonzeroTime(earliest, d)//谁最小取谁
+		earliest = minNonzeroTime(earliest, d) //谁最小取谁
 	}
 	return minNonzeroTime(earliest, d.Deadline)
 }
@@ -171,9 +171,10 @@ func (d *Dialer) fallbackDelay() time.Duration {
 	}
 }
 
+//返回的afnet可能是 ip,ip4,ip6；tcp,tcp4,tcp6；udp,udp4,upd6；
 func parseNetwork(ctx context.Context, network string, needsProto bool) (afnet string, proto int, err error) {
 	i := last(network, ':')
-	if i < 0 { // no colon
+	if i < 0 { // no colon network里没有:号
 		switch network {
 		case "tcp", "tcp4", "tcp6":
 		case "udp", "udp4", "udp6":
@@ -185,8 +186,10 @@ func parseNetwork(ctx context.Context, network string, needsProto bool) (afnet s
 		default:
 			return "", 0, UnknownNetworkError(network)
 		}
+
 		return network, 0, nil
 	}
+
 	afnet = network[:i]
 	switch afnet {
 	case "ip", "ip4", "ip6":
@@ -206,6 +209,8 @@ func parseNetwork(ctx context.Context, network string, needsProto bool) (afnet s
 // resolveAddrList resolves addr using hint and returns a list of
 // addresses. The result contains at least one address when error is
 // nil.
+// op操作，有dial发起连接请求，listen启动监听，
+// 解析addr
 func (r *Resolver) resolveAddrList(ctx context.Context, op, network, addr string, hint Addr) (addrList, error) {
 	afnet, _, err := parseNetwork(ctx, network, true)
 	if err != nil {
@@ -214,6 +219,7 @@ func (r *Resolver) resolveAddrList(ctx context.Context, op, network, addr string
 	if op == "dial" && addr == "" {
 		return nil, errMissingAddress
 	}
+
 	switch afnet {
 	case "unix", "unixgram", "unixpacket":
 		addr, err := ResolveUnixAddr(afnet, addr)
@@ -225,6 +231,7 @@ func (r *Resolver) resolveAddrList(ctx context.Context, op, network, addr string
 		}
 		return addrList{addr}, nil
 	}
+
 	addrs, err := r.internetAddrList(ctx, afnet, addr)
 	if err != nil || op != "dial" || hint == nil {
 		return addrs, err
@@ -381,7 +388,7 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (Conn
 		panic("nil context")
 	}
 	deadline := d.deadline(ctx, time.Now())
-	if !deadline.IsZero() {//设置/创建一个deadline ctx
+	if !deadline.IsZero() { //设置/创建一个deadline ctx
 		if d, ok := ctx.Deadline(); !ok || deadline.Before(d) {
 			subCtx, cancel := context.WithDeadline(ctx, deadline)
 			defer cancel()
@@ -418,8 +425,8 @@ func (d *Dialer) DialContext(ctx context.Context, network, address string) (Conn
 
 	sd := &sysDialer{
 		Dialer:  *d,
-		network: network,//网络类型
-		address: address,//对端地址
+		network: network, //网络类型
+		address: address, //对端地址
 	}
 
 	var primaries, fallbacks addrList
@@ -608,6 +615,7 @@ func (sd *sysDialer) dialSingle(ctx context.Context, ra Addr) (c Conn, err error
 }
 
 // ListenConfig contains options for listening to an address.
+// 存放监听某个地址时的配置项
 type ListenConfig struct {
 	// If Control is not nil, it is called after creating the network
 	// connection but before binding it to the operating system.
@@ -615,6 +623,7 @@ type ListenConfig struct {
 	// Network and address parameters passed to Control method are not
 	// necessarily the ones passed to Listen. For example, passing "tcp" to
 	// Listen will cause the Control function to be called with "tcp4" or "tcp6".
+	// 如果本字段不为nil，在创建网络连接（listen_fd）后，bind调用前，会调用这个字段
 	Control func(network, address string, c syscall.RawConn) error
 
 	// KeepAlive specifies the keep-alive period for network
@@ -623,6 +632,7 @@ type ListenConfig struct {
 	// and operating system. Network protocols or operating systems
 	// that do not support keep-alives ignore this field.
 	// If negative, keep-alives are disabled.
+	// =0代表开启keepalive，<0不开启
 	KeepAlive time.Duration
 }
 
@@ -630,6 +640,7 @@ type ListenConfig struct {
 //
 // See func Listen for a description of the network and address
 // parameters.
+// UDP是不需要Listen的，所以这里没有处理udp的逻辑
 func (lc *ListenConfig) Listen(ctx context.Context, network, address string) (Listener, error) {
 	addrs, err := DefaultResolver.resolveAddrList(ctx, "listen", network, address, nil)
 	if err != nil {
@@ -641,10 +652,10 @@ func (lc *ListenConfig) Listen(ctx context.Context, network, address string) (Li
 		address:      address,
 	}
 	var l Listener
-	la := addrs.first(isIPv4)
+	la := addrs.first(isIPv4) //判断ip是否ipv4，返回第一个ip
 	switch la := la.(type) {
-	case *TCPAddr:
-		l, err = sl.listenTCP(ctx, la)
+	case *TCPAddr: //network=tcp
+		l, err = sl.listenTCP(ctx, la) //返回Listener接口的具体实现的实例
 	case *UnixAddr:
 		l, err = sl.listenUnix(ctx, la)
 	default:
@@ -690,7 +701,7 @@ func (lc *ListenConfig) ListenPacket(ctx context.Context, network, address strin
 
 // sysListener contains a Listen's parameters and configuration.
 type sysListener struct {
-	ListenConfig
+	ListenConfig     //存放监听某个地址时的配置项
 	network, address string
 }
 
@@ -715,6 +726,8 @@ type sysListener struct {
 //
 // Listen uses context.Background internally; to specify the context, use
 // ListenConfig.Listen.
+// 创建一个监听address的通用监听器 Listener接口
+// network：tcp，unix等，udp是不需要listen的，因此udp不会调用这里，udp使用 ListenPacket
 func Listen(network, address string) (Listener, error) {
 	var lc ListenConfig
 	return lc.Listen(context.Background(), network, address)
@@ -745,6 +758,8 @@ func Listen(network, address string) (Listener, error) {
 //
 // ListenPacket uses context.Background internally; to specify the context, use
 // ListenConfig.ListenPacket.
+// 给udp使用的「listen」，注意udp是不需要监听器的，也即不需要调用listen()
+// 每次调用本函数，都是返回
 func ListenPacket(network, address string) (PacketConn, error) {
 	var lc ListenConfig
 	return lc.ListenPacket(context.Background(), network, address)

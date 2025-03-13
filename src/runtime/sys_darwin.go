@@ -220,6 +220,7 @@ func read(fd int32, p unsafe.Pointer, n int32) int32 {
 }
 func read_trampoline()
 
+//创建管道，r读端，w写端
 func pipe() (r, w int32, errno int32) {
 	var p [2]int32
 	errno = libcCall(unsafe.Pointer(abi.FuncPCABI0(pipe_trampoline)), noescape(unsafe.Pointer(&p)))

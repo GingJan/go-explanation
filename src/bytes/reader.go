@@ -17,7 +17,7 @@ import (
 // The zero value for Reader operates like a Reader of an empty slice.
 type Reader struct {
 	s        []byte
-	i        int64 // current reading index
+	i        int64 // 当前读取到的下标 current reading index
 	prevRune int   // index of previous rune; or < 0
 }
 
@@ -68,8 +68,8 @@ func (r *Reader) ReadByte() (byte, error) {
 	r.prevRune = -1
 	if r.i >= int64(len(r.s)) {
 		return 0, io.EOF
-	}
-	b := r.s[r.i]
+	} //r.s的数据都读取完毕了
+	b := r.s[r.i] //读取r.i下标这1个字节
 	r.i++
 	return b, nil
 }

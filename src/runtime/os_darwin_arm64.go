@@ -4,6 +4,7 @@
 
 package runtime
 
+//返回cputicks时钟，当前系统时间
 //go:nosplit
 func cputicks() int64 {
 	// Currently cputicks() is used in blocking profiler and to seed runtime·fastrand().

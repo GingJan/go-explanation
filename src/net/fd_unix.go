@@ -23,7 +23,7 @@ const (
 	writeMsgSyscallName = "sendmsg"
 )
 
-//返回一个封装sysfd的netFD实例
+//返回一个封装了 sysfd 的 netFD 实例，sysfd可能是listen_fd，也可能是client_fd，也可能是文件fd
 func newFD(sysfd, family, sotype int, net string) (*netFD, error) {
 	ret := &netFD{
 		pfd: poll.FD{
@@ -170,7 +170,7 @@ func (fd *netFD) connect(ctx context.Context, la, ra syscall.Sockaddr) (rsa sysc
 }
 
 func (fd *netFD) accept() (netfd *netFD, err error) {
-	d, rsa, errcall, err := fd.pfd.Accept()
+	clientFd, rsa, errcall, err := fd.pfd.Accept() //阻塞在此，直到有新连接建立请求，clientFd是新的client-fd（int）
 	//当没有新连接创建请求时，则本协程阻塞在这，不会往下走（底层调用了gopark）
 
 	//当有新连接创建请求进来时，则本协程继续运行，走下面逻辑（）
@@ -181,11 +181,11 @@ func (fd *netFD) accept() (netfd *netFD, err error) {
 		return nil, err
 	}
 
-	if netfd, err = newFD(d, fd.family, fd.sotype, fd.net); err != nil {
-		poll.CloseFunc(d)
+	if netfd, err = newFD(clientFd, fd.family, fd.sotype, fd.net); err != nil { //封装client_fd，并返回一个封装实例
+		poll.CloseFunc(clientFd)
 		return nil, err
 	}
-	if err = netfd.init(); err != nil { //epoll的创建 + 新连接fd（d变量）被添加到监听队列
+	if err = netfd.init(); err != nil { //epoll的创建（如果未创建） + 新clientfd 连接 添加到epoll监听队列
 		netfd.Close()
 		return nil, err
 	}

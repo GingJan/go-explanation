@@ -57,7 +57,7 @@ func supportsIPv4map() bool {
 }
 
 // An addrList represents a list of network endpoint addresses.
-type addrList []Addr
+type addrList []Addr //多个ip地址
 
 // isIPv4 reports whether addr contains an IPv4 address.
 func isIPv4(addr Addr) bool {
