@@ -463,6 +463,7 @@ func timediv(v int64, div int32, rem *int32) int32 {
 
 // Helpers for Go. Must be NOSPLIT, must only call NOSPLIT functions, and must not block.
 // 霸占当前线程M的控制权。实际上是对当前 M 的引用计数加 1，防止调度器在某些关键操作期间将当前 P（处理器）从 M 上解绑。
+// 调用此函数，代表调用方当前所处的逻辑是不可被中断/抢占的，也即需要一直占用cpu来执行逻辑，直接执行完毕才可以被抢占
 //go:nosplit
 func acquirem() *m {
 	_g_ := getg() //g0
@@ -471,6 +472,7 @@ func acquirem() *m {
 }
 
 //go:nosplit
+//解除「不可抢占」
 func releasem(mp *m) {
 	_g_ := getg() //g0 或 g
 	mp.locks--

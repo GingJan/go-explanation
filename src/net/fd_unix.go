@@ -203,7 +203,7 @@ func (fd *netFD) accept() (netfd *netFD, err error) {
 
 //复制一个本netFD实例的副本
 func (fd *netFD) dup() (f *os.File, err error) {
-	sysfdDup, call, err := fd.pfd.Dup() //ns 是 fd.pfd.Sysfd的副本
+	sysfdDup, call, err := fd.pfd.Dup() //sysfdDup 是 fd.pfd.Sysfd的副本
 	if err != nil {
 		if call != "" {
 			err = os.NewSyscallError(call, err)

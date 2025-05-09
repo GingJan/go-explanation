@@ -403,7 +403,7 @@ var work struct {
 	stwprocs, maxprocs                 int32
 	tSweepTerm, tMark, tMarkTerm, tEnd int64 // nanotime() of phase start
 
-	pauseNS    int64 // total STW time this cycle
+	pauseNS    int64 // 本次gc周期 stw的总共时长
 	pauseStart int64 // nanotime() of last STW
 
 	// debug.gctrace heap sizes for this cycle.

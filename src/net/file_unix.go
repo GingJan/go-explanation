@@ -31,7 +31,7 @@ func dupSocket(f *os.File) (int, error) {
 	return dupS, nil
 }
 
-//创建一个网络fd实例
+//把传入的fd，封装成一个网络fd，并创建该结构体的实例
 func newFileFD(f *os.File) (*netFD, error) {
 	dupS, err := dupSocket(f) //f的副本 dupS
 	if err != nil {

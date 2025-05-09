@@ -106,10 +106,10 @@ func netpollBreak() {
 
 // netpoll checks for ready network connections.
 // Returns list of goroutines that become runnable.
-// delay < 0: blocks indefinitely
-// delay == 0: does not block, just polls
-// delay > 0: block for up to that many nanoseconds
-// 相当于epoll_wait
+// delay < 0: 永久阻塞，直到epoll上有事件就绪
+// delay == 0: 不阻塞，只是轮询一次epoll，立即返回
+// delay > 0: 阻塞等待delay纳秒后，返回
+// 相当于epoll_wait，也即该函数会进行系统调用，因此当前线程M会被挂起
 func netpoll(delay int64) gList {
 	if kq == -1 {
 		return gList{}

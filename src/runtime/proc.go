@@ -1303,7 +1303,7 @@ func stopTheWorldWithSema() {
 func startTheWorldWithSema(emitTraceEvent bool) int64 {
 	assertWorldStopped()
 
-	mp := acquirem()     // disable preemption because it can be holding p in a local var
+	mp := acquirem()     // 关闭抢占标识，使得后面逻辑一直占用cpu执行，because it can be holding p in a local var
 	if netpollinited() { //如果netpoll已初始化了，则尝试下看看有无就绪的IO事件
 		list := netpoll(0) // 在startTheWorld时就先尝试看有无IO事件就绪。非阻塞，当IO未就绪时立即返回，此时list是空的
 		injectglist(&list)
@@ -2705,7 +2705,7 @@ top:
 	// 尝试从网络poll里获取
 	// 在从其他p偷取g前，先尝试在网络阻塞上获取g，若没g或线程阻塞在网络访问上，则跳过此步骤
 	if netpollinited() && atomic.Load(&netpollWaiters) > 0 && atomic.Load64(&sched.lastpoll) != 0 {
-		if list := netpoll(0); !list.empty() { // 在findrunnable里调用，说明此时某个P已经干完活了，要继续找活干。delay=0非阻塞调用
+		if list := netpoll(0); !list.empty() { // 在findrunnable里非阻塞调用，说明此时某个P已经干完活了，要继续找活干。delay=0非阻塞调用
 			gp := list.pop()
 			injectglist(&list)
 			casgstatus(gp, _Gwaiting, _Grunnable)
@@ -2895,7 +2895,7 @@ top:
 			// When using fake time, just poll.
 			delay = 0
 		}
-		list := netpoll(delay) // 也是在findrunnable()调用，但是本次是只阻塞等待delay
+		list := netpoll(delay) // 也是在findrunnable()调用，但本次是尝试阻塞等待delay ns后才返回，可想而知，当前P真的没g可运行了
 		atomic.Store64(&sched.pollUntil, 0)
 		atomic.Store64(&sched.lastpoll, uint64(nanotime()))
 		if faketime != 0 && list.empty() {
@@ -2956,7 +2956,7 @@ func pollWork() bool {
 	// 有使用netpoll 且 当前有G在等待netpoll的事件 且 当前未在polling
 	// 那么就进行一次polling（delay=0，不阻塞，如果当前还没时间就绪就立即返回），查看是否有事件就绪
 	if netpollinited() && atomic.Load(&netpollWaiters) > 0 && sched.lastpoll != 0 {
-		if list := netpoll(0); !list.empty() { //pollWork()里调用，轮询是否有网络IO就绪，非阻塞调用
+		if list := netpoll(0); !list.empty() { //gc阶段流转里的pollWork()的调用，轮询是否有网络IO就绪，非阻塞调用
 			injectglist(&list) //把等待在其上面的G放入到全局或P的队列里等待执行
 			return true
 		}
@@ -5347,7 +5347,7 @@ func sysmon() {
 			//更新netpoll本次调用时间点
 			atomic.Cas64(&sched.lastpoll, uint64(lastpoll), uint64(now))
 
-			list := netpoll(0) // non-blocking - returns list of goroutines 非阻塞，返回有网络数据就绪的goroutine列表
+			list := netpoll(0) // sysmon，系统监控线程调度，非阻塞，返回有网络数据就绪的goroutine列表
 			if !list.empty() {
 				// Need to decrement number of idle locked M's
 				// (pretending that one more is running) before injectglist.
