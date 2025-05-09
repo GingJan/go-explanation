@@ -58,14 +58,15 @@ import (
 	"runtime/internal/atomic"
 )
 
+//被suspendG函数挂起的g
 type suspendGState struct {
-	g *g
+	g *g //指向被suspendG函数挂起的g
 
 	// dead indicates the goroutine was not suspended because it
 	// is dead. This goroutine could be reused after the dead
 	// state was observed, so the caller must not assume that it
 	// remains dead.
-	dead bool
+	dead bool //该g是否还在使用
 
 	// stopped indicates that this suspendG transitioned the G to
 	// _Gwaiting via g.preemptStop and thus is responsible for
@@ -111,7 +112,7 @@ func suspendG(gp *g) suspendGState {
 	}
 
 	// See https://golang.org/cl/21503 for justification of the yield delay.
-	const yieldDelay = 10 * 1000
+	const yieldDelay = 10 * 1000 // 10ms
 	var nextYield int64
 
 	// Drive the goroutine to a preemption point.
@@ -120,9 +121,9 @@ func suspendG(gp *g) suspendGState {
 	var asyncGen uint32
 	var nextPreemptM int64
 	for i := 0; ; i++ {
-		switch s := readgstatus(gp); s {
+		switch s := readgstatus(gp); s { //判断gp协程的状态
 		default:
-			if s&_Gscan != 0 {
+			if s&_Gscan != 0 { //该用户协程正被GC扫描
 				// Someone else is suspending it. Wait
 				// for them to finish.
 				//
@@ -131,10 +132,10 @@ func suspendG(gp *g) suspendGState {
 				break
 			}
 
-			dumpgstatus(gp)
-			throw("invalid g status")
+			dumpgstatus(gp)           //打印当前用户协程gp的状态信息
+			throw("invalid g status") //当前协程状态异常
 
-		case _Gdead:
+		case _Gdead: //当前协程已不再使用
 			// Nothing to suspend.
 			//
 			// preemptStop may need to be cleared, but
@@ -142,7 +143,7 @@ func suspendG(gp *g) suspendGState {
 			// reuse. Instead, goexit0 clears it.
 			return suspendGState{dead: true}
 
-		case _Gcopystack:
+		case _Gcopystack: //当前协程处于栈复制状态（一般是处于栈伸缩时）
 			// The stack is being copied. We need to wait
 			// until this is done.
 
@@ -173,7 +174,7 @@ func suspendG(gp *g) suspendGState {
 			// _Gscan bit and thus own the stack.
 			gp.preemptStop = false
 			gp.preempt = false
-			gp.stackguard0 = gp.stack.lo + _StackGuard
+			gp.stackguard0 = gp.stack.lo + _StackGuard //指向「零值」
 
 			// The goroutine was already at a safe-point
 			// and we've now locked that in.
@@ -202,18 +203,20 @@ func suspendG(gp *g) suspendGState {
 			}
 
 			// Request synchronous preemption.
+			// 请求同步抢占
 			gp.preemptStop = true
 			gp.preempt = true
 			gp.stackguard0 = stackPreempt
 
 			// Prepare for asynchronous preemption.
-			asyncM2 := gp.m
-			asyncGen2 := atomic.Load(&asyncM2.preemptGen)
+			// 准备异步抢占
+			asyncM2 := gp.m                               //要被异步抢占的m（线程）
+			asyncGen2 := atomic.Load(&asyncM2.preemptGen) //该m已被异步抢占的次数
 			needAsync := asyncM != asyncM2 || asyncGen != asyncGen2
 			asyncM = asyncM2
 			asyncGen = asyncGen2
 
-			casfrom_Gscanstatus(gp, _Gscanrunning, _Grunning)
+			casfrom_Gscanstatus(gp, _Gscanrunning, _Grunning) //从gc扫描态切换为running态
 
 			// Send asynchronous preemption. We do this
 			// after CASing the G back to _Grunning
@@ -229,7 +232,7 @@ func suspendG(gp *g) suspendGState {
 				now := nanotime()
 				if now >= nextPreemptM {
 					nextPreemptM = now + yieldDelay/2
-					preemptM(asyncM)
+					preemptM(asyncM) //
 				}
 			}
 		}
@@ -255,13 +258,14 @@ func suspendG(gp *g) suspendGState {
 
 // resumeG undoes the effects of suspendG, allowing the suspended
 // goroutine to continue from its current safe-point.
+// 撤销 suspendG 函数的影响，允许被suspendG函数挂起的协程从safe-point处恢复，继续运行
 func resumeG(state suspendGState) {
-	if state.dead {
+	if state.dead { //如果该协程已不再使用
 		// We didn't actually stop anything.
 		return
 	}
 
-	gp := state.g
+	gp := state.g //被suspendG挂起的g
 	switch s := readgstatus(gp); s {
 	default:
 		dumpgstatus(gp)

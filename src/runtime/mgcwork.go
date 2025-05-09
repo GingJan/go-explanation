@@ -112,6 +112,7 @@ func (w *gcWork) init() {
 
 // put enqueues a pointer for the garbage collector to trace.
 // obj must point to the beginning of a heap object or an oblet.
+// 把obj指向的堆对象放入到gcWork任务池里
 //go:nowritebarrierrec
 func (w *gcWork) put(obj uintptr) {
 	flushed := false

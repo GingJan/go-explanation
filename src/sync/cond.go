@@ -18,23 +18,26 @@ import (
 // when calling the Wait method.
 //
 // A Cond must not be copied after first use.
+// 本结构体的实现依赖底层的runtime/sema.go的 runtime.notifyList
 type Cond struct {
 	noCopy noCopy
 
 	// L is held while observing or changing the condition
+	//
 	L Locker
 
-	notify  notifyList
+	notify  notifyList //信号量
 	checker copyChecker
 }
 
 // NewCond returns a new Cond with Locker l.
+// 返回一个带有L锁的Cond实例
 func NewCond(l Locker) *Cond {
 	return &Cond{L: l}
 }
 
-// Wait atomically unlocks c.L and suspends execution
-// of the calling goroutine. After later resuming execution,
+// 本方法自动解锁c.L同时暂停调用方协程的执行
+// 当恢复执行时，在返回前锁上c.L，
 // Wait locks c.L before returning. Unlike in other systems,
 // Wait cannot return unless awoken by Broadcast or Signal.
 //
@@ -52,8 +55,14 @@ func NewCond(l Locker) *Cond {
 func (c *Cond) Wait() {
 	c.checker.check()
 	t := runtime_notifyListAdd(&c.notify)
+
+	//这里为什么解锁？因为调用本方法前，必须先持有c.L.Lock()，同时也是因为下一行代码会阻塞，为了让后续的协程能调用Wait方法，这里必须在进入阻塞前解锁
 	c.L.Unlock()
+
+	//阻塞等待c.notify信号量
 	runtime_notifyListWait(&c.notify, t)
+
+	//然后在返回时，调用方收到返回后，必须解锁c.L
 	c.L.Lock()
 }
 
@@ -63,7 +72,7 @@ func (c *Cond) Wait() {
 // during the call.
 func (c *Cond) Signal() {
 	c.checker.check()
-	runtime_notifyListNotifyOne(&c.notify)
+	runtime_notifyListNotifyOne(&c.notify) //通知一个
 }
 
 // Broadcast wakes all goroutines waiting on c.
@@ -72,7 +81,7 @@ func (c *Cond) Signal() {
 // during the call.
 func (c *Cond) Broadcast() {
 	c.checker.check()
-	runtime_notifyListNotifyAll(&c.notify)
+	runtime_notifyListNotifyAll(&c.notify) //通知全部阻塞在c.notify上的协程
 }
 
 // copyChecker holds back pointer to itself to detect object copying.

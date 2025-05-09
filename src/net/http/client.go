@@ -252,7 +252,7 @@ func send(ireq *Request, rt RoundTripper, deadline time.Time) (resp *Response, d
 	}
 	stopTimer, didTimeout := setRequestCancel(req, rt, deadline)
 
-	resp, err = rt.RoundTrip(req)
+	resp, err = rt.RoundTrip(req) //客户端 真正发出http请求（调用底层的Transport实例进行发送）
 	if err != nil {
 		stopTimer()
 		if resp != nil {

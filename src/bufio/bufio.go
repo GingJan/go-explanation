@@ -31,7 +31,7 @@ var (
 // Reader implements buffering for an io.Reader object.
 // Reader 为io.Reader实现了缓冲功能
 type Reader struct {
-	buf          []byte    //环形切片，读写都在该切片内进行（可参考环形链表），w-r代表剩余可写入数据的空间，若w-r < len(buf) 说明环形切片未满
+	buf          []byte    // 环形切片，读写都在该切片内进行（可参考环形链表），w-r代表剩余可写入数据的空间，若w-r < len(buf) 说明环形切片未满
 	rd           io.Reader // 调用者注入的reader（底层reader），读取该reader时可能会被阻塞，挂起当前goroutine
 	r, w         int       // 表示r读/w写在 buf 切片的下标（环形切片）
 	err          error     // 错误信息
@@ -87,7 +87,7 @@ func (b *Reader) Reset(r io.Reader) {
 func (b *Reader) reset(buf []byte, r io.Reader) {
 	*b = Reader{
 		buf:          buf, //本对象的缓冲区
-		rd:           r,   //底层reader
+		rd:           r,   //更底层reader
 		lastByte:     -1,
 		lastRuneSize: -1,
 	}
@@ -95,7 +95,6 @@ func (b *Reader) reset(buf []byte, r io.Reader) {
 
 var errNegativeRead = errors.New("bufio: reader returned negative count from Read")
 
-// fill reads a new chunk into the buffer.
 // fill 从底层 b.rd 处读取新数据块到缓冲区 b.buf 以填满
 func (b *Reader) fill() {
 	// 把剩余的数据都挪到buf的起始位置
@@ -110,9 +109,9 @@ func (b *Reader) fill() {
 	}
 
 	// Read new data: try a limited number of times.
-	// 从底层数据流读取新的数据：尝试 maxConsecutiveEmptyReads 次后底层依旧无数据或b.buf满了就返回错误
+	// 从底层reader(b.rd)读取数据：尝试 maxConsecutiveEmptyReads 次后底层依旧无数据可读就返回错误
 	for i := maxConsecutiveEmptyReads; i > 0; i-- {
-		n, err := b.rd.Read(b.buf[b.w:]) //从rd里读取数据到b.buf的[b.w:]里，b.w是b.buf可写的起始点，这里可能会被阻塞（如果rd是网络连接）以至于当前goroutine会被挂起
+		n, err := b.rd.Read(b.buf[b.w:]) //从b.rd里读取数据到b.buf的[b.w:]里，b.w是b.buf可写的起始点，这里可能会被阻塞（如果rd是网络连接）以至于当前goroutine会被挂起
 		if n < 0 {
 			panic(errNegativeRead)
 		}
@@ -347,7 +346,7 @@ func (b *Reader) UnreadRune() error {
 	return nil
 }
 
-// Buffered 返回当前缓冲区里剩余可读取数据的字节数
+// 返回当前缓冲区里剩余可读取数据的字节数
 func (b *Reader) Buffered() int { return b.w - b.r }
 
 // ReadSlice reads until the first occurrence of delim in the input,
@@ -389,7 +388,7 @@ func (b *Reader) ReadSlice(delim byte) (line []byte, err error) {
 
 		s = b.w - b.r // do not rescan area we scanned before
 
-		b.fill() // buffer is not full
+		b.fill() // 缓冲区还有空间（还未满）
 	}
 
 	// Handle last byte, if any.
@@ -595,7 +594,7 @@ type Writer struct {
 	err error
 	buf []byte
 	n   int       // 已经使用的字节数，或当前写入的位置
-	wr  io.Writer //指向底层Writer
+	wr  io.Writer // 指向底层Writer
 }
 
 // NewWriterSize returns a new Writer whose buffer has at least the specified
@@ -640,7 +639,7 @@ func (b *Writer) Reset(w io.Writer) {
 	b.wr = w
 }
 
-// Flush 把本Writer缓冲区的数据全部写入到底层wr里
+// Flush 把本Writer缓冲区的数据全部写入到底层wr里（若是网络，则是发送给客户端）
 func (b *Writer) Flush() error {
 	if b.err != nil {
 		return b.err
@@ -681,28 +680,26 @@ func (b *Writer) AvailableBuffer() []byte {
 // Buffered 返回已写入当前Writer缓冲区的字节个数
 func (b *Writer) Buffered() int { return b.n }
 
-// Write writes the contents of p into the buffer.
-// It returns the number of bytes written.
-// If nn < len(p), it also returns an error explaining
-// why the write is short.
-// 把p的数据写入到底层wr里
+// 把p的数据写入到b的缓冲区里，如果b的缓冲区空间不够，则直接写入底层wr里
 func (b *Writer) Write(p []byte) (nn int, err error) {
-	for len(p) > b.Available() && b.err == nil {
+	for len(p) > b.Available() && b.err == nil { //b的缓冲区空间不够大，一次性装不了p，分开多次装入p
 		var n int
 		if b.Buffered() == 0 { //当前缓冲区未有数据
 			// 则直接把p里数据写入到底层的wr，避免多一次复制
 			n, b.err = b.wr.Write(p)
 		} else {
-			n = copy(b.buf[b.n:], p) //把p的数据写入到本Writer的buf里
+			n = copy(b.buf[b.n:], p) //把p的数据写入（追加）到本Writer的buf里
 			b.n += n
 			b.Flush() //然后再把本Writer的buf数据全部写入到底层wr
 		}
 		nn += n
-		p = p[n:]
+		p = p[n:] //分开多次，把p写入缓冲区里
 	}
 	if b.err != nil {
 		return nn, b.err
 	}
+
+	//b的缓冲区空间足够大，可一次性写入整个p
 	n := copy(b.buf[b.n:], p)
 	b.n += n
 	nn += n

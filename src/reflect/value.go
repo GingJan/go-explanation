@@ -2742,6 +2742,7 @@ type runtimeSelect struct {
 // If the case was a receive, val is filled in with the received value.
 // The conventional OK bool indicates whether the receive corresponds
 // to a sent value.
+// 执行select语句，本函数返回选中case语句的下标chosen
 //go:noescape
 func rselect([]runtimeSelect) (chosen int, recvOK bool)
 

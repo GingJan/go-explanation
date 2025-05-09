@@ -23,7 +23,7 @@ const (
 	writeMsgSyscallName = "sendmsg"
 )
 
-//返回一个封装了 sysfd 的 netFD 实例，sysfd可能是listen_fd，也可能是client_fd，也可能是文件fd
+//返回一个封装了 sysfd 的 netFD 网络FD实例，sysfd可能是listen_fd，也可能是client_fd，也可能是文件fd
 func newFD(sysfd, family, sotype int, net string) (*netFD, error) {
 	ret := &netFD{
 		pfd: poll.FD{
@@ -39,9 +39,10 @@ func newFD(sysfd, family, sotype int, net string) (*netFD, error) {
 }
 
 func (fd *netFD) init() error {
-	return fd.pfd.Init(fd.net, true)
+	return fd.pfd.Init(fd.net, true) //网络fd都是可轮询的
 }
 
+//网络fd的name是 tcp或udp:本地监听的ip->远程对端的ip
 func (fd *netFD) name() string {
 	var ls, rs string
 	if fd.laddr != nil {
@@ -169,9 +170,10 @@ func (fd *netFD) connect(ctx context.Context, la, ra syscall.Sockaddr) (rsa sysc
 	}
 }
 
+//listenFd调用此方法，接受来自其上的新clientFd连接
 func (fd *netFD) accept() (netfd *netFD, err error) {
-	clientFd, rsa, errcall, err := fd.pfd.Accept() //阻塞在此，直到有新连接建立请求，clientFd是新的client-fd（int）
-	//当没有新连接创建请求时，则本协程阻塞在这，不会往下走（底层调用了gopark）
+	//阻塞在此，直到有新连接建立请求，clientFd是新的client-fd（int）
+	clientFd, rsa, errcall, err := fd.pfd.Accept() //当没有新连接创建请求时，则本协程阻塞在这，不会往下走（底层调用了gopark）
 
 	//当有新连接创建请求进来时，则本协程继续运行，走下面逻辑（）
 	if err != nil {
@@ -181,21 +183,27 @@ func (fd *netFD) accept() (netfd *netFD, err error) {
 		return nil, err
 	}
 
-	if netfd, err = newFD(clientFd, fd.family, fd.sotype, fd.net); err != nil { //封装client_fd，并返回一个封装实例
+	//封装clientFd，并返回该封装（ netFD 结构体）的实例
+	if netfd, err = newFD(clientFd, fd.family, fd.sotype, fd.net); err != nil {
 		poll.CloseFunc(clientFd)
 		return nil, err
 	}
+
+	//然后通过调用netfd.init()方法，把clientFd加入到epoll里监听
 	if err = netfd.init(); err != nil { //epoll的创建（如果未创建） + 新clientfd 连接 添加到epoll监听队列
 		netfd.Close()
 		return nil, err
 	}
+
 	lsa, _ := syscall.Getsockname(netfd.pfd.Sysfd) //Sysfd存放的是系统的fd标识
 	netfd.setAddr(netfd.addrFunc()(lsa), netfd.addrFunc()(rsa))
+	//最后返回该clientFd（的封装）
 	return netfd, nil
 }
 
+//复制一个本netFD实例的副本
 func (fd *netFD) dup() (f *os.File, err error) {
-	ns, call, err := fd.pfd.Dup()
+	sysfdDup, call, err := fd.pfd.Dup() //ns 是 fd.pfd.Sysfd的副本
 	if err != nil {
 		if call != "" {
 			err = os.NewSyscallError(call, err)
@@ -203,5 +211,5 @@ func (fd *netFD) dup() (f *os.File, err error) {
 		return nil, err
 	}
 
-	return os.NewFile(uintptr(ns), fd.name()), nil
+	return os.NewFile(uintptr(sysfdDup), fd.name()), nil
 }

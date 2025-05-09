@@ -70,9 +70,9 @@ type mstats struct {
 	pause_ns        [256]uint64 // circular buffer of recent gc pause lengths
 	pause_end       [256]uint64 // circular buffer of recent gc end times (nanoseconds since 1970)
 	numgc           uint32
-	numforcedgc     uint32  // number of user-forced GCs
+	numforcedgc     uint32  // 由用户主动触发GC的次数
 	gc_cpu_fraction float64 // fraction of CPU time used by GC
-	enablegc        bool
+	enablegc        bool    //gc是否就绪可以执行
 	debuggc         bool
 
 	// Statistics about allocation size classes.

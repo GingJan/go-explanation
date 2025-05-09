@@ -917,7 +917,7 @@ func printAncestorTracebackFuncInfo(f funcInfo, pc uintptr) {
 }
 
 func callers(skip int, pcbuf []uintptr) int {
-	sp := getcallersp()//获取调用者的栈指针
+	sp := getcallersp() //获取调用者的栈指针
 	pc := getcallerpc()
 	gp := getg()
 	var n int
@@ -1130,10 +1130,10 @@ func tracebackHexdump(stk stack, frame *stkframe, bad uintptr) {
 // If fixed is true, any goroutine that can vary between user and
 // system (that is, the finalizer goroutine) is considered a user
 // goroutine.
-// gp是否系统协程
+// gp是否系统协程，即g0
 func isSystemGoroutine(gp *g, fixed bool) bool {
 	// Keep this in sync with cmd/trace/trace.go:isSystemGoroutine.
-	f := findfunc(gp.startpc)//获取gp入口函数的信息
+	f := findfunc(gp.startpc) //获取gp入口函数的信息
 	if !f.valid() {
 		return false
 	}
@@ -1151,7 +1151,7 @@ func isSystemGoroutine(gp *g, fixed bool) bool {
 		}
 		return !fingRunning
 	}
-	return hasPrefix(funcname(f), "runtime.")//如果该入口函数名字有runtime.前缀，则是认为该G是系统协程
+	return hasPrefix(funcname(f), "runtime.") //如果该入口函数名字有runtime.前缀，则是认为该G是系统协程
 }
 
 // SetCgoTraceback records three C functions to use to gather

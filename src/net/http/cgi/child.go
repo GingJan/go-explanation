@@ -25,6 +25,7 @@ import (
 // environment. This assumes the current program is being run
 // by a web server in a CGI environment.
 // The returned Request's Body is populated, if applicable.
+// 如果本go应用在web服务器的CGI环境里运行，那么本函数返回这种运行模式下的Request请求实例
 func Request() (*http.Request, error) {
 	r, err := RequestFromMap(envMap(os.Environ()))
 	if err != nil {
@@ -149,15 +150,15 @@ func Serve(handler http.Handler) error {
 		req.Body = http.NoBody
 	}
 	if handler == nil {
-		handler = http.DefaultServeMux
+		handler = http.DefaultServeMux //默认路由器（多路复用器）
 	}
 	rw := &response{
 		req:    req,
 		header: make(http.Header),
-		bufw:   bufio.NewWriter(os.Stdout),
+		bufw:   bufio.NewWriter(os.Stdout), //输出缓冲区，存放请求的处理结果/响应数据，底层是os.Stdout，也即「客户端」
 	}
-	handler.ServeHTTP(rw, req)
-	rw.Write(nil) // make sure a response is sent
+	handler.ServeHTTP(rw, req) //处理请求，请求的处理结果/响应数据 都在rw里
+	rw.Write(nil)              // make sure a response is sent
 	if err = rw.bufw.Flush(); err != nil {
 		return err
 	}
@@ -183,14 +184,15 @@ func (r *response) Header() http.Header {
 
 func (r *response) Write(p []byte) (n int, err error) {
 	if !r.wroteHeader {
-		r.WriteHeader(http.StatusOK)
+		r.WriteHeader(http.StatusOK) //设置响应状态码
 	}
 	if !r.wroteCGIHeader {
-		r.writeCGIHeader(p)
+		r.writeCGIHeader(p) //发送响应header的数据给客户端
 	}
-	return r.bufw.Write(p)
+	return r.bufw.Write(p) //把p的数据写入到b的缓冲区里，如果b的缓冲区空间不够，则直接写入底层wr里（也即发送给客户端）
 }
 
+//设置响应状态码
 func (r *response) WriteHeader(code int) {
 	if r.wroteHeader {
 		// Note: explicitly using Stderr, as Stdout is our HTTP output.
@@ -214,7 +216,7 @@ func (r *response) writeCGIHeader(p []byte) {
 	if _, hasType := r.header["Content-Type"]; !hasType {
 		r.header.Set("Content-Type", http.DetectContentType(p))
 	}
-	r.header.Write(r.bufw)
+	r.header.Write(r.bufw) //把header的数据通过r.bufw写入到r.bufw的缓冲区里等待发送给客户端
 	r.bufw.WriteString("\r\n")
-	r.bufw.Flush()
+	r.bufw.Flush() //把bufw缓冲区的数据发送给客户端
 }

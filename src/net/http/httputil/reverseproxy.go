@@ -211,6 +211,7 @@ func (p *ReverseProxy) modifyResponse(rw http.ResponseWriter, res *http.Response
 	return true
 }
 
+//反向代理服务器上，对请求进行处理
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	transport := p.Transport
 	if transport == nil {
@@ -223,6 +224,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		ctx, cancel = context.WithCancel(ctx)
 		defer cancel()
 		notifyChan := cn.CloseNotify()
+
 		go func() {
 			select {
 			case <-notifyChan:
@@ -299,7 +301,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	res, err := transport.RoundTrip(outreq)
+	res, err := transport.RoundTrip(outreq) //反向代理服务器把请求转发给下游服务器
 	if err != nil {
 		p.getErrorHandler()(rw, outreq, err)
 		return

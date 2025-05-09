@@ -31,24 +31,26 @@ const (
 // ../cmd/compile/internal/reflectdata/reflect.go:/^func.dcommontype and
 // ../reflect/type.go:/^type.rtype.
 // ../internal/reflectlite/type.go:/^type.rtype.
+// go所有类型的基础结构（无论int还是map，slice等）
+// 可以把它看成 Go 的运行时 类型元信息（type metadata）结构体，用来描述“这是一个什么类型的东西”。
 type _type struct {
-	size       uintptr // 代表该类型的大小（字节数）
-	ptrdata    uintptr // size of memory prefix holding all pointers 代表在指针区域之后的数据成员大小（字节数）
-	hash       uint32 // 类型的哈希值
-	tflag      tflag //类型标志位，表示该类型是否包含指针、是否需要垃圾回收等信息
-	align      uint8 //对齐方式，即按照几个字节对齐
-	fieldAlign uint8//对齐方式，即按照几个字节对齐（对于 struct 类型）
-	kind       uint8//类型种类，如 slice、map、struct 等
+	size       uintptr // 代表该类型占用的内存大小（字节）
+	ptrdata    uintptr // size of memory prefix holding all pointers 代表在指针区域之后的数据成员大小（字节数），GC 会扫描的 pointer 部分（从头开始的长度）
+	hash       uint32  // 类型的哈希值
+	tflag      tflag   // 类型标志位，表示该类型是否包含指针、是否需要垃圾回收等信息
+	align      uint8   // 对齐方式，即按照几个字节对齐
+	fieldAlign uint8   // struct 中字段的对齐方式，即按照几个字节对齐（对于 struct 类型）
+	kind       uint8   // 类型的种类，比如 int、string、slice 等
 	// function for comparing objects of this type
 	// (ptr to object A, ptr to object B) -> ==?
 	// 本type类型的实例对比函数
-	equal func(unsafe.Pointer, unsafe.Pointer) bool//判断两个对象是否相等的函数
+	equal func(unsafe.Pointer, unsafe.Pointer) bool //判断两个该类型的实例是否相等的函数
 	// gcdata stores the GC type data for the garbage collector.
 	// If the KindGCProg bit is set in kind, gcdata is a GC program.
 	// Otherwise it is a ptrmask bitmap. See mbitmap.go for details.
-	gcdata    *byte//存储垃圾回收相关的信息
-	str       nameOff//类型名称
-	ptrToThis typeOff//指向自身的指针
+	gcdata    *byte   //存储GC相关的信息
+	str       nameOff //类型名称
+	ptrToThis typeOff //指向自身的指针
 }
 
 func (t *_type) string() string {
@@ -346,24 +348,28 @@ type interfacetype struct {
 	mhdr    []imethod
 }
 
+//存放map类型信息的结构体
 type maptype struct {
 	typ    _type
-	key    *_type
-	elem   *_type
+	key    *_type //该map的key的类型
+	elem   *_type //该map的value的类型
 	bucket *_type // internal type representing a hash bucket
 	// function for hashing keys (ptr to key, seed) -> hash
-	hasher     func(unsafe.Pointer, uintptr) uintptr
-	keysize    uint8  // size of key slot
-	elemsize   uint8  // size of elem slot
-	bucketsize uint16 // size of bucket
+	hasher     func(unsafe.Pointer, uintptr) uintptr //计算key 哈希值的函数，func(key的指针，随机种子) 返回该key哈希值
+	keysize    uint8                                 // 桶里存放key的槽的大小
+	elemsize   uint8                                 // 桶里存放value的槽的大小
+	bucketsize uint16                                // 每个bucket桶（bmap结构体）的大小
 	flags      uint32
 }
 
 // Note: flag values must match those used in the TMAP case
 // in ../cmd/compile/internal/reflectdata/reflect.go:writeType.
+// 存储指向key的指针而不是存key本身，这种情况一般是因为key为非基础类型，比如key是slice，结构体等
 func (mt *maptype) indirectkey() bool { // store ptr to key instead of key itself
 	return mt.flags&1 != 0
 }
+
+// 是否存放指向elem的指针，而不是elem本身
 func (mt *maptype) indirectelem() bool { // store ptr to elem instead of elem itself
 	return mt.flags&2 != 0
 }

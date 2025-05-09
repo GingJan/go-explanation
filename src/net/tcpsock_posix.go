@@ -135,6 +135,7 @@ func spuriousENOTAVAIL(err error) bool {
 
 func (ln *TCPListener) ok() bool { return ln != nil && ln.fd != nil }
 
+//负责处理listenFd的协程调用此方法，接受来自listenFd其上的新连接建立请求
 func (ln *TCPListener) accept() (*TCPConn, error) {
 	fd, err := ln.fd.accept() //如果有新连接请求，这里不会阻塞，而是返回
 	if err != nil {

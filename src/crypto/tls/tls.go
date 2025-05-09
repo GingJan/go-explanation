@@ -54,7 +54,7 @@ func Client(conn net.Conn, config *Config) *Conn {
 	return c
 }
 
-// A listener implements a network listener (net.Listener) for TLS connections.
+// 本结构体实现了TLS连接的 net.Listener 接口
 type listener struct {
 	net.Listener
 	config *Config

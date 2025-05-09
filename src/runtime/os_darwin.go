@@ -9,11 +9,11 @@ import (
 	"unsafe"
 )
 
-type mOS struct {
-	initialized bool//当前os线程是否初始化
-	mutex       pthreadmutex//线程互斥锁，用于保护cond和count字段
-	cond        pthreadcond//condition
-	count       int//每调用一次semawakeup就+1，semasleep就-1
+type mOS struct { //OS线程信息
+	initialized bool         //当前os线程是否初始化
+	mutex       pthreadmutex //线程互斥锁，用于保护cond和count字段
+	cond        pthreadcond  //condition
+	count       int          //每调用一次semawakeup就+1，semasleep就-1
 }
 
 func unimplemented(name string) {
@@ -49,7 +49,7 @@ func semasleep(ns int64) int32 {
 	}
 
 	mp := getg().m
-	pthread_mutex_lock(&mp.mutex)//获取线程互斥锁，若获取不了则阻塞/休眠，直到锁被释放重新唤醒抢锁
+	pthread_mutex_lock(&mp.mutex) //获取线程互斥锁，若获取不了则阻塞/休眠，直到锁被释放重新唤醒抢锁
 
 	//拿到锁了
 	for {
@@ -60,38 +60,38 @@ func semasleep(ns int64) int32 {
 		}
 
 		//进入休眠逻辑
-		if ns >= 0 {//休眠ns 纳秒再返回
-			spent := nanotime() - start//当前时间距离起始时间
-			if spent >= ns {//大于需睡眠的时间，则立即返回（因为已经休眠够了）
+		if ns >= 0 { //休眠ns 纳秒再返回
+			spent := nanotime() - start //当前时间距离起始时间
+			if spent >= ns {            //大于需睡眠的时间，则立即返回（因为已经休眠够了）
 				pthread_mutex_unlock(&mp.mutex)
 				return -1
 			}
 			var t timespec
-			t.setNsec(ns - spent)//还剩t纳秒休眠
-			err := pthread_cond_timedwait_relative_np(&mp.cond, &mp.mutex, &t)//挂起当前线程 t 纳秒，其他同 pthread_cond_wait 函数
+			t.setNsec(ns - spent)                                              //还剩t纳秒休眠
+			err := pthread_cond_timedwait_relative_np(&mp.cond, &mp.mutex, &t) //挂起当前线程 t 纳秒，其他同 pthread_cond_wait 函数
 
 			//t纳秒后，线程恢复运行
-			if err == _ETIMEDOUT {//已达到休眠t纳秒，则退出挂起
-				pthread_mutex_unlock(&mp.mutex)//释放线程互斥锁
+			if err == _ETIMEDOUT { //已达到休眠t纳秒，则退出挂起
+				pthread_mutex_unlock(&mp.mutex) //释放线程互斥锁
 				return -1
 			}
-		} else {//一直休眠，只有有信号唤起
-			pthread_cond_wait(&mp.cond, &mp.mutex)//将当前线程放入阻塞队列，直到mp.cond的信号变化，该函数内部逻辑请进入查看
+		} else { //一直休眠，只有有信号唤起
+			pthread_cond_wait(&mp.cond, &mp.mutex) //将当前线程放入阻塞队列，直到mp.cond的信号变化，该函数内部逻辑请进入查看
 			//此时本线程还是持有锁的，进入下一个循环
 		}
 	}
 }
 
 //go:nosplit
-func semawakeup(mp *m) {//通过向m.cond发送信号的方式，通知所有监听该信号量的线程
-	pthread_mutex_lock(&mp.mutex)//线程互斥锁，当线程无法获取锁时，则阻塞
+func semawakeup(mp *m) { //通过向m.cond发送信号的方式，通知所有监听该信号量的线程
+	pthread_mutex_lock(&mp.mutex) //线程互斥锁，当线程无法获取锁时，则阻塞
 
 	//线程获取到锁了，线程被唤醒，恢复运行
 	mp.count++
 	if mp.count > 0 {
-		pthread_cond_signal(&mp.cond)//通知所有阻塞在mp.cond信号的线程
+		pthread_cond_signal(&mp.cond) //通知所有阻塞在mp.cond信号的线程
 	}
-	pthread_mutex_unlock(&mp.mutex)//解锁
+	pthread_mutex_unlock(&mp.mutex) //解锁
 }
 
 // The read and write file descriptors used by the sigNote functions.
@@ -341,7 +341,7 @@ func minit() {
 		minitSignalStack()
 	}
 	minitSignalMask()
-	getg().m.procid = uint64(pthread_self())//当当前系统线程id填入当前g所在m的procid字段
+	getg().m.procid = uint64(pthread_self()) //当当前系统线程id填入当前g所在m的procid字段
 }
 
 // Called from dropm to undo the effect of an minit.
@@ -476,9 +476,10 @@ func sysargs(argc int32, argv **byte) {
 		executablePath = executablePath[len(prefix):]
 	}
 }
+
 //向m所绑定的系统线程发送一个sig信号
 func signalM(mp *m, sig int) {
-	pthread_kill(pthread(mp.procid), uint32(sig))//向线程id=mp.procid的系统线程发送sig信号
+	pthread_kill(pthread(mp.procid), uint32(sig)) //向线程id=mp.procid的系统线程发送sig信号
 }
 
 // sigPerThreadSyscall is only used on linux, so we assign a bogus signal

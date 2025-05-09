@@ -245,7 +245,7 @@ var (
 type conn struct {
 	// server is the server on which the connection arrived.
 	// Immutable; never nil.
-	server *Server //http服务器实例
+	server *Server //指向http服务器实例
 
 	// cancelCtx cancels the connection-level context.
 	cancelCtx context.CancelFunc
@@ -255,7 +255,7 @@ type conn struct {
 	// to CloseNotifier callers. It is usually of type *net.TCPConn or
 	// *tls.Conn.
 	// rwc时底层的网络连接，
-	rwc net.Conn //http请求的连接，移步@see net.conn.Read或Writer()，如果是https，看tls.conn.Read或Writer()
+	rwc net.Conn //指向更底层的连接，移步@see net.conn.Read或Writer()，如果是https，看tls.conn.Read或Writer()
 
 	// remoteAddr is rwc.RemoteAddr().String(). It is not populated synchronously
 	// inside the Listener's Accept goroutine, as some implementations block.
@@ -284,9 +284,9 @@ type conn struct {
 
 	// lastMethod is the method of the most recent request
 	// on this connection, if any.
-	lastMethod string //最近一次http请求对应的method
+	lastMethod string //本连接上最近一次http请求时，对应的method
 
-	curReq atomic.Value // of *response (which has a Request in it)
+	curReq atomic.Value // 指向当前正处理的w（该w内含有本次请求实例）
 
 	curState struct{ atomic uint64 } // packed (unixtime<<8|uint8(ConnState)) 加一层struct封装，是考虑内存对齐问题
 
@@ -422,7 +422,7 @@ func (cw *chunkWriter) close() {
 // 代表服务端侧的http响应实例
 type response struct {
 	conn             *conn
-	req              *Request // 本响应对应的请求 request for this response
+	req              *Request // 本响应对应的请求实例
 	reqBody          io.ReadCloser
 	cancelCtx        context.CancelFunc // when ServeHTTP exits
 	wroteHeader      bool               // reply header has been (logically) written
@@ -616,7 +616,7 @@ func (w *response) ReadFrom(src io.Reader) (n int64, err error) {
 const debugServerConnections = false
 
 // Create new connection from rwc.
-// 创建rwc的封装 conn
+// 创建rwc的封装 conn（作为新连接的实例）
 func (srv *Server) newConn(rwc net.Conn) *conn {
 	c := &conn{
 		server: srv,
@@ -642,7 +642,7 @@ type readResult struct {
 // trigger a CloseNotifier channel.
 // conn实例通过本结构体对连接的请求数据进行读取
 type connReader struct {
-	conn *conn
+	conn *conn //指向底层的conn连接实例
 
 	mu      sync.Mutex // guards following
 	hasByte bool
@@ -713,7 +713,7 @@ func (cr *connReader) backgroundRead() {
 	cr.aborted = false
 	cr.inRead = false
 	cr.unlock()
-	cr.cond.Broadcast()
+	cr.cond.Broadcast() //数据读取完毕（从底层连接读取到cr.byteBuf后）
 }
 
 func (cr *connReader) abortPendingRead() {
@@ -725,7 +725,7 @@ func (cr *connReader) abortPendingRead() {
 	cr.aborted = true
 	cr.conn.rwc.SetReadDeadline(aLongTimeAgo)
 	for cr.inRead {
-		cr.cond.Wait()
+		cr.cond.Wait() //阻塞在此
 	}
 	cr.conn.rwc.SetReadDeadline(time.Time{})
 }
@@ -967,39 +967,39 @@ func appendTime(b []byte, t time.Time) []byte {
 
 var errTooLarge = errors.New("http: request too large")
 
-// Read next request from connection.
 // 从连接里读取下一个请求
 func (c *conn) readRequest(ctx context.Context) (w *response, err error) {
+	//如果连接被挟持了（一般是升级到websocket了）
 	if c.hijacked() { //如果连接被挟持了（通常是因为用于从http升级为websocket）
 		return nil, ErrHijacked
 	}
 
 	var (
-		wholeReqDeadline time.Time // or zero if none
-		hdrDeadline      time.Time // or zero if none
+		wholeReqDeadline time.Time // 整个请求的读取超时时间
+		hdrDeadline      time.Time // 读请求的超时时间
 	)
 	t0 := time.Now()
-	if d := c.server.readHeaderTimeout(); d > 0 {
+	if d := c.server.readHeaderTimeout(); d > 0 { //请求头的读取超时时间
 		hdrDeadline = t0.Add(d)
 	}
-	if d := c.server.ReadTimeout; d > 0 {
+	if d := c.server.ReadTimeout; d > 0 { //整个请求的读取超时时间
 		wholeReqDeadline = t0.Add(d)
 	}
 	c.rwc.SetReadDeadline(hdrDeadline) //设置读超时
 	if d := c.server.WriteTimeout; d > 0 {
 		defer func() {
-			c.rwc.SetWriteDeadline(time.Now().Add(d))
+			c.rwc.SetWriteDeadline(time.Now().Add(d)) //响应数据的发送超时时间
 		}()
 	}
 
 	c.r.setReadLimit(c.server.initialReadLimitSize()) //每次请求读取的数据大小
 
-	if c.lastMethod == "POST" { //如果请求时post请求，则尝试从请求体读取数据
+	if c.lastMethod == "POST" { //如果请求是post请求，则尝试从请求体读取数据
 		// RFC 7230 section 3 tolerance for old buggy clients.
-		peek, _ := c.bufr.Peek(4) // 从底层连接里读取数据到bufr，这里可能会阻塞等待数据，从而让出G的执行
+		peek, _ := c.bufr.Peek(4) // 从底层连接里读取数据并放到bufr，这里可能会阻塞等待数据，从而让出G的执行
 		// 如果请求前 4 个字节匹配 PRI （即 PRI *，是 HTTP/2 的魔法字节），则说明客户端使用的是 HTTP/2 连接。
 		// 如果不是 PRI ，则按照 HTTP/1.x 解析请求。
-		c.bufr.Discard(numLeadingCRorLF(peek)) //bufr往后移
+		c.bufr.Discard(numLeadingCRorLF(peek)) //bufr往后移peek个字节
 	}
 
 	req, err := readRequest(c.bufr) //从bufr里读取数据并解析，封装成Request实例返回
@@ -1054,7 +1054,7 @@ func (c *conn) readRequest(ctx context.Context) (w *response, err error) {
 	w = &response{
 		conn:          c,
 		cancelCtx:     cancelCtx,
-		req:           req,
+		req:           req, //指向请求实例
 		reqBody:       req.Body,
 		handlerHeader: make(Header),
 		contentLength: -1,
@@ -1838,13 +1838,13 @@ func isCommonNetReadError(err error) bool {
 	return false
 }
 
-// Serve a new connection.
-// 处理连接上的请求，管理连接的状态，从 active->idle->close 轮转，传入时连接状态是new
+// 处理新连接上的请求，当新连接建立后，http服务器会启用一个协程并调用本方法，然后进入循环，直到连接关闭。
+// 管理连接的状态，从 active->idle->close 轮转，传入时连接状态是new
 // 当http服务器监听到新连接conn时，会启动一个协程专门处理这个连接的请求，这个协程调用conn.serve本方法
 // 在本方法内上处理http请求
 func (c *conn) serve(ctx context.Context) {
-	c.remoteAddr = c.rwc.RemoteAddr().String()
-	ctx = context.WithValue(ctx, LocalAddrContextKey, c.rwc.LocalAddr())
+	c.remoteAddr = c.rwc.RemoteAddr().String()                           //设置对端的ip地址
+	ctx = context.WithValue(ctx, LocalAddrContextKey, c.rwc.LocalAddr()) //写入本http服务器的ip地址到ctx里
 	var inFlightResponse *response
 	defer func() {
 		if err := recover(); err != nil && err != ErrAbortHandler {
@@ -1919,7 +1919,7 @@ func (c *conn) serve(ctx context.Context) {
 
 	for {
 		//只要连接没关闭，就一直循环等待这个连接上的http请求
-		w, err := c.readRequest(ctx)                       //读取请求的数据，w=response实例
+		w, err := c.readRequest(ctx)                       //读取请求的数据并解析，同时创建一个w实例（响应实例）
 		if c.r.remain != c.server.initialReadLimitSize() { //判断是否为新请求
 			// If we read any bytes off the wire, we're active.
 			c.setState(c.rwc, StateActive, runHooks) //是，则更新连接状态为active
@@ -1997,7 +1997,8 @@ func (c *conn) serve(ctx context.Context) {
 		// But we're not going to implement HTTP pipelining because it
 		// was never deployed in the wild and the answer is HTTP/2.
 		inFlightResponse = w
-		serverHandler{c.server}.ServeHTTP(w, w.req) //调用c.server里的Handler进行处理请求，这个Handler是可由用户自定义的
+		serverHandler{c.server}. //调用c.server里的Handler进行处理请求，这个Handler是可由用户自定义的
+						ServeHTTP(w, w.req) //这里才是真正处理http请求的逻辑
 		inFlightResponse = nil
 		w.cancelCtx()
 		if c.hijacked() {
@@ -2305,35 +2306,45 @@ type ServeMux struct {
 	mu    sync.RWMutex
 	m     map[string]muxEntry // map[路由path]muxEntry，路由算法最长前缀匹配策略，逐个全量遍历，时间复杂度 O1
 	es    []muxEntry          // slice of entries sorted from longest to shortest.
-	hosts bool                // 标记是否 区分 host 名称（比如 example.com/path1 和 another.com/path2 是否是独立路由）。whether any patterns contain hostnames
+	hosts bool                // 标记注册的path里，是否有path含有域名，只要有一个path它含有域名，这里就=true（比如 example.com/path1 和 another.com/path2 是否是独立路由）。whether any patterns contain hostnames
 }
 
 type muxEntry struct {
 	h       Handler //路由handler
-	pattern string  //路由
+	pattern string  //路由path
 }
 
 // NewServeMux allocates and returns a new ServeMux.
 func NewServeMux() *ServeMux { return new(ServeMux) }
 
 // DefaultServeMux is the default ServeMux used by Serve.
-var DefaultServeMux = &defaultServeMux
+var DefaultServeMux = &defaultServeMux //默认的路由器单例
 
-var defaultServeMux ServeMux
+var defaultServeMux ServeMux //默认的路由器
 
-// cleanPath returns the canonical path for p, eliminating . and .. elements.
+// 规范化路径，主要用于清理和标准化输入路径字符串，去除 . 和 .. 这些特殊目录
+//cleanPath("") =>               "/"
+//cleanPath("foo/bar") =>        "/foo/bar"
+//cleanPath("/foo//bar/") =>     "/foo/bar/"
+//cleanPath("/foo/./bar") =>     "/foo/bar"
+//cleanPath("/foo/../bar/") =>   "/bar/"
+//cleanPath("/../") =>           "/"
+//cleanPath("a/b/c") =>          "/a/b/c"
 func cleanPath(p string) string {
-	if p == "" {
+	if p == "" { // 确保路径以 '/' 开头
 		return "/"
 	}
-	if p[0] != '/' {
+	if p[0] != '/' { // 确保路径以 '/' 开头
 		p = "/" + p
 	}
+
+	// 调用 path.Clean 进行标准化处理
 	np := path.Clean(p)
-	// path.Clean removes trailing slash except for root;
-	// put the trailing slash back if necessary.
+
+	// path.Clean 会去掉路径末尾的 '/'（除了根目录 "/"）
+	// 这里需要检查是否要加回 '/'
 	if p[len(p)-1] == '/' && np != "/" {
-		// Fast path for common case of p being the string we want:
+		// 如果 np 已经是正确的路径，直接返回 p
 		if len(p) == len(np)+1 && strings.HasPrefix(p, np) {
 			np = p
 		} else {
@@ -2363,14 +2374,15 @@ func (mux *ServeMux) match(path string) (h Handler, pattern string) {
 	// Check for exact match first.
 	// 先精准匹配
 	v, ok := mux.m[path]
-	if ok {
+	if ok { //找到就返回
 		return v.h, v.pattern
 	}
 
 	// Check for longest valid match.  mux.es contains all patterns
 	// that end in / sorted from longest to shortest.
-	// 再最类似 匹配
-	for _, e := range mux.es { //逐个全量遍历
+	// 精准匹配没找到，进入近似匹配
+	for _, e := range mux.es { //全量遍历
+		//前缀匹配（最近似）
 		if strings.HasPrefix(path, e.pattern) {
 			return e.h, e.pattern
 		}
@@ -2423,14 +2435,8 @@ func (mux *ServeMux) shouldRedirectRLocked(host, path string) bool {
 // 不会返回空nil handler了，即便是不规范的path，它会阿方能和iu内部生成的handler（用来重定向到规范的path）
 // 如果host里含有port，在进行匹配时port会被忽略
 //
-// The path and host are used unchanged for CONNECT requests.
-//
-// Handler also returns the registered pattern that matches the
-// request or, in the case of internally-generated redirects,
-// the pattern that will match after following the redirect.
-//
-// 如果该请求找不到对应的handler，则会返回 「page not found」 handler和空的pattern
-// Handler returns a “page not found” handler and an empty pattern.
+// 如果该请求找不到对应的handler，则会返回 「page not found」handler和空的pattern
+// 根据请求r，解析path，匹配对应的handler h并返回该handler和对应的路由pattern
 func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string) {
 
 	// CONNECT 请求是非标准method.
@@ -2447,7 +2453,7 @@ func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string) {
 
 	// 在传入mux.handler前，请求的端口和路径都需清掉
 	host := stripHostPort(r.Host) //提取出host
-	path := cleanPath(r.URL.Path) //提取出path
+	path := cleanPath(r.URL.Path) //规范化path
 
 	// 如果path是 /xxx 且没注册对应handler
 	// 重定向为 /xxx/.
@@ -2464,27 +2470,30 @@ func (mux *ServeMux) Handler(r *Request) (h Handler, pattern string) {
 	return mux.handler(host, r.URL.Path)
 }
 
-// handler 是 Handler 接口的主要实现
 // The path is known to be in canonical form, except for CONNECT methods.
 // 返回 host+path 对应的 handler（这就是路由器的功能）
 func (mux *ServeMux) handler(host, path string) (h Handler, pattern string) {
 	mux.mu.RLock()
 	defer mux.mu.RUnlock()
 
-	// 指定host的pattern先于通用pattern
+	// 如果pattern含有host，则先进行host匹配
 	if mux.hosts { //从指定host pattern里找
 		h, pattern = mux.match(host + path)
 	}
-	if h == nil { //从通用pattern里找
+
+	//从通用pattern里找
+	if h == nil {
 		h, pattern = mux.match(path)
 	}
-	if h == nil { //找不到对应的pattern，则返回not found handler
+
+	//依旧找不到对应的pattern，则返回not found handler
+	if h == nil {
 		h, pattern = NotFoundHandler(), ""
 	}
 	return
 }
 
-// ServeHTTP 把请求分派给路由最接近请求URL的handler
+// 根据请求的path匹配路由，并调起该路由的handler进行请求处理
 func (mux *ServeMux) ServeHTTP(w ResponseWriter, r *Request) {
 	if r.RequestURI == "*" {
 		if r.ProtoAtLeast(1, 1) {
@@ -2499,7 +2508,7 @@ func (mux *ServeMux) ServeHTTP(w ResponseWriter, r *Request) {
 
 // Handle registers the handler for the given pattern.
 // If a handler already exists for pattern, Handle panics.
-// 注册路由
+// 注册路由，path及其对应handler
 func (mux *ServeMux) Handle(pattern string, handler Handler) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
@@ -2510,13 +2519,15 @@ func (mux *ServeMux) Handle(pattern string, handler Handler) {
 	if handler == nil {
 		panic("http: nil handler")
 	}
-	if _, exist := mux.m[pattern]; exist {
+	if _, exist := mux.m[pattern]; exist { //path已注册过
 		panic("http: multiple registrations for " + pattern)
 	}
 
-	if mux.m == nil {
+	if mux.m == nil { //初始化
 		mux.m = make(map[string]muxEntry)
 	}
+
+	//创建一个muxEntry实例（封装handler+path）
 	e := muxEntry{h: handler, pattern: pattern}
 	mux.m[pattern] = e
 	if pattern[len(pattern)-1] == '/' {
@@ -2524,7 +2535,7 @@ func (mux *ServeMux) Handle(pattern string, handler Handler) {
 	}
 
 	if pattern[0] != '/' {
-		mux.hosts = true
+		mux.hosts = true //如果path的第一个字符不是/，则说明该path含有域名比如 example.com/path/to/xxx
 	}
 }
 
@@ -2696,6 +2707,7 @@ type Server struct {
 	// the context used for a new connection c. The provided ctx
 	// is derived from the base context and has a ServerContextKey
 	// value.
+	// 新连接的基础ctx封装函数，如果设置了，在新连接建立时，会调用本方法对ctx（传入的ctx是http服务器层级的ctx）进行一层封装后返回
 	ConnContext func(ctx context.Context, c net.Conn) context.Context
 
 	inShutdown atomicBool // true when server is in shutdown
@@ -3061,8 +3073,8 @@ var ErrServerClosed = errors.New("http: Server closed")
 // Serve always returns a non-nil error and closes l.
 // After Shutdown or Close, the returned error is ErrServerClosed.
 //
-// 启动http服务器， Serve 在Listener l 上接受新连接请求，并创建goroutine处理每条连接
-// goroutine里读取该连接的请求并调用srv.Handler响应请求
+// 启动http服务器， 本方法负责接受监听器l上的新连接请求（通过l.Accept方法），并创建单独的goroutine负责处理该新连接，
+// goroutine里读取该连接的请求并调用srv.Handler处理请求并发送响应数据
 // 只有在Listener返回 *tls.Conn 连接时，HTTP/2才可用，并且在TLS的Config.NextProtos 里被设为 h2
 func (srv *Server) Serve(l net.Listener) error {
 	if fn := testHookServerServe; fn != nil {
@@ -3077,13 +3089,14 @@ func (srv *Server) Serve(l net.Listener) error {
 		return err
 	}
 
-	if !srv.trackListener(&l, true) { //把l添加到 s.listeners 里进行管理
+	//把l添加到 s.listeners 里进行管理
+	if !srv.trackListener(&l, true) {
 		return ErrServerClosed
 	}
 	defer srv.trackListener(&l, false) //把l从 s.listeners 里删除
 
-	baseCtx := context.Background() //server启动时，第一层ctx
-	if srv.BaseContext != nil {     //如果设置了base ctx函数
+	baseCtx := context.Background() //server启动时的默认第一层ctx
+	if srv.BaseContext != nil {     //如果设置了base ctx函数，则覆盖上面的baseCtx
 		baseCtx = srv.BaseContext(origListener)
 		if baseCtx == nil {
 			panic("BaseContext returned a nil context")
@@ -3092,9 +3105,11 @@ func (srv *Server) Serve(l net.Listener) error {
 
 	ctx := context.WithValue(baseCtx, ServerContextKey, srv) //又一层ctx，封装了key和srv
 
+	//至此，ctx里包含了本http服务器层级的信息
+
 	var tempDelay time.Duration // 当accept接收连接失败时，休眠tempDelay后再唤醒
 	for {                       //循环阻塞，不断等待新连接
-		rw, err := l.Accept() //阻塞等待新连接请求，rw是Conn接口的实现的实例
+		rw, err := l.Accept() //(http服务器使用)，阻塞等待新连接请求，rw是Conn接口的实现的实例（也即新连接实例）
 		if err != nil {
 			select {
 			case <-srv.getDoneChan():
@@ -3118,7 +3133,7 @@ func (srv *Server) Serve(l net.Listener) error {
 		}
 
 		connCtx := ctx
-		if cc := srv.ConnContext; cc != nil { //如果设置了新连接ctx，则有新连接建立时，再一层ctx
+		if cc := srv.ConnContext; cc != nil { //如果设置了新连接ctx，则有新连接建立时，再加一层ctx
 			connCtx = cc(connCtx, rw)
 			if connCtx == nil {
 				panic("ConnContext returned nil")
@@ -3127,7 +3142,7 @@ func (srv *Server) Serve(l net.Listener) error {
 
 		tempDelay = 0
 		c := srv.newConn(rw)                  //创建rw的封装，每次accept一个新连接，就创建一个封装rw的conn实例，该实例用于维护rw的各种状态和信息
-		c.setState(c.rwc, StateNew, runHooks) //设置新状态
+		c.setState(c.rwc, StateNew, runHooks) //设置连接的新状态
 		go c.serve(connCtx)                   //每个新连接开一个协程处理
 	}
 }
@@ -3224,6 +3239,7 @@ func (s *Server) idleTimeout() time.Duration {
 	return s.ReadTimeout
 }
 
+// 读取请求头的超时时间
 func (s *Server) readHeaderTimeout() time.Duration {
 	if s.ReadHeaderTimeout != 0 {
 		return s.ReadHeaderTimeout
@@ -3243,6 +3259,7 @@ func (s *Server) shuttingDown() bool {
 // By default, keep-alives are always enabled. Only very
 // resource-constrained environments or servers in the process of
 // shutting down should disable them.
+// 设置http层面的keep-alives标记，默认该标记一直开启
 func (srv *Server) SetKeepAlivesEnabled(v bool) {
 	if v { //开启了长连接
 		atomic.StoreInt32(&srv.disableKeepAlives, 0)

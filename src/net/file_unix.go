@@ -12,34 +12,40 @@ import (
 	"syscall"
 )
 
+//把f里的系统fd复制一份副本，并返回该副本
 func dupSocket(f *os.File) (int, error) {
-	s, call, err := poll.DupCloseOnExec(int(f.Fd()))
+	dupS, call, err := poll.DupCloseOnExec(int(f.Fd())) //底层系统fd的副本 dupS
 	if err != nil {
 		if call != "" {
 			err = os.NewSyscallError(call, err)
 		}
 		return -1, err
 	}
-	if err := syscall.SetNonblock(s, true); err != nil {
-		poll.CloseFunc(s)
+
+	//把系统fd（副本）设为非阻塞
+	if err := syscall.SetNonblock(dupS, true); err != nil {
+		poll.CloseFunc(dupS)
 		return -1, os.NewSyscallError("setnonblock", err)
 	}
-	return s, nil
+
+	return dupS, nil
 }
 
+//创建一个网络fd实例
 func newFileFD(f *os.File) (*netFD, error) {
-	s, err := dupSocket(f)
+	dupS, err := dupSocket(f) //f的副本 dupS
 	if err != nil {
 		return nil, err
 	}
 	family := syscall.AF_UNSPEC
-	sotype, err := syscall.GetsockoptInt(s, syscall.SOL_SOCKET, syscall.SO_TYPE)
+	sotype, err := syscall.GetsockoptInt(dupS, syscall.SOL_SOCKET, syscall.SO_TYPE)
 	if err != nil {
-		poll.CloseFunc(s)
+		poll.CloseFunc(dupS)
 		return nil, os.NewSyscallError("getsockopt", err)
 	}
-	lsa, _ := syscall.Getsockname(s)
-	rsa, _ := syscall.Getpeername(s)
+
+	lsa, _ := syscall.Getsockname(dupS)
+	rsa, _ := syscall.Getpeername(dupS)
 	switch lsa.(type) {
 	case *syscall.SockaddrInet4:
 		family = syscall.AF_INET
@@ -48,23 +54,26 @@ func newFileFD(f *os.File) (*netFD, error) {
 	case *syscall.SockaddrUnix:
 		family = syscall.AF_UNIX
 	default:
-		poll.CloseFunc(s)
+		poll.CloseFunc(dupS)
 		return nil, syscall.EPROTONOSUPPORT
 	}
-	fd, err := newFD(s, family, sotype, "") //文件fd
+
+	//新建一个封装了dupS的结构体实例
+	netFd, err := newFD(dupS, family, sotype, "")
 	if err != nil {
-		poll.CloseFunc(s)
+		poll.CloseFunc(dupS)
 		return nil, err
 	}
-	laddr := fd.addrFunc()(lsa)
-	raddr := fd.addrFunc()(rsa)
-	fd.net = laddr.Network()
-	if err := fd.init(); err != nil {
-		fd.Close()
+	laddr := netFd.addrFunc()(lsa)
+	raddr := netFd.addrFunc()(rsa)
+	netFd.net = laddr.Network()
+	if err := netFd.init(); err != nil {
+		netFd.Close()
 		return nil, err
 	}
-	fd.setAddr(laddr, raddr)
-	return fd, nil
+
+	netFd.setAddr(laddr, raddr)
+	return netFd, nil
 }
 
 func fileConn(f *os.File) (Conn, error) {

@@ -52,11 +52,11 @@ func rename(oldname, newname string) error {
 // can overwrite this data, which could cause the finalizer
 // to close the wrong file descriptor.
 type file struct {
-	pfd         poll.FD
+	pfd         poll.FD //指向poll包的可轮询FD结构体，该结构体实现了轮询系统fd的能力
 	name        string
 	dirinfo     *dirInfo // nil unless directory being read
 	nonblock    bool     // whether we set nonblocking mode
-	stdoutOrErr bool     // whether this is stdout or stderr
+	stdoutOrErr bool     // 本file实例是否标准输出或标准错误
 	appendMode  bool     // whether file is opened for appending
 }
 
@@ -72,6 +72,7 @@ type file struct {
 // may close an unrelated file descriptor with the same (reused) number.
 //
 // As an alternative, see the f.SyscallConn method.
+// 返回f实例底层的系统fd
 func (f *File) Fd() uintptr {
 	if f == nil {
 		return ^(uintptr(0))
@@ -82,6 +83,7 @@ func (f *File) Fd() uintptr {
 	// because historically we have always returned a descriptor
 	// opened in blocking mode. The File will continue to work,
 	// but any blocking operation will tie up a thread.
+	// 如果f（或者说底层系统的fd）是设为非阻塞模式的，那么这里我们先把它设回阻塞模式，兼容历史版本的处理逻辑（因为历史逻辑获取到的是一个已打开并且阻塞的fd）
 	if f.nonblock {
 		f.pfd.SetBlocking()
 	}
@@ -101,26 +103,27 @@ func (f *File) Fd() uintptr {
 func NewFile(fd uintptr, name string) *File {
 	kind := kindNewFile
 	if nb, err := unix.IsNonblock(int(fd)); err == nil && nb {
-		kind = kindNonBlock
+		kind = kindNonBlock //fd是非阻塞模式
 	}
-	return newFile(fd, name, kind)
+	//把系统fd封装一层并创建该封装实例
+	return newFile(fd, name, kind) //NewFile调用
 }
 
 // newFileKind describes the kind of file to newFile.
 type newFileKind int
 
 const (
-	kindNewFile newFileKind = iota
-	kindOpenFile
-	kindPipe
-	kindNonBlock
+	kindNewFile  newFileKind = iota //fd刚被创建
+	kindOpenFile                    //fd被打开了
+	kindPipe                        //fd是管道pipe
+	kindNonBlock                    //fd是非阻塞模式的
 )
 
 // newFile is like NewFile, but if called from OpenFile or Pipe
 // (as passed in the kind parameter) it tries to add the file to
 // the runtime poller.
 func newFile(fd uintptr, name string, kind newFileKind) *File {
-	fdi := int(fd)
+	fdi := int(fd) //系统fd
 	if fdi < 0 {
 		return nil
 	}
@@ -131,14 +134,16 @@ func newFile(fd uintptr, name string, kind newFileKind) *File {
 			ZeroReadIsEOF: true,
 		},
 		name:        name,
-		stdoutOrErr: fdi == 1 || fdi == 2,
+		stdoutOrErr: fdi == 1 || fdi == 2, //标准输出1，标准错误2
 	}}
 
-	pollable := kind == kindOpenFile || kind == kindPipe || kind == kindNonBlock
+	//新建的f实例（或说其封装的系统fd）是否可轮询的
+	pollable := kind == kindOpenFile || kind == kindPipe || kind == kindNonBlock //pollable是否可轮询的
 
 	// If the caller passed a non-blocking filedes (kindNonBlock),
 	// we assume they know what they are doing so we allow it to be
 	// used with kqueue.
+	// 判断不同类型的fd在不同系统平台上是否pollable的
 	if kind == kindOpenFile {
 		switch runtime.GOOS {
 		case "darwin", "ios", "dragonfly", "freebsd", "netbsd", "openbsd":
@@ -168,6 +173,7 @@ func newFile(fd uintptr, name string, kind newFileKind) *File {
 		}
 	}
 
+	//初始化poll.FD可轮询结构体
 	if err := f.pfd.Init("file", pollable); err != nil {
 		// An error here indicates a failure to register
 		// with the netpoll system. That can happen for
@@ -176,13 +182,13 @@ func newFile(fd uintptr, name string, kind newFileKind) *File {
 		// Linux systems. We assume that any real error
 		// will show up in later I/O.
 	} else if pollable {
-		// We successfully registered with netpoll, so put
-		// the file into nonblocking mode.
+		//成本把f实例加入到epoll实例里，也即f实例是非阻塞的了
 		if err := syscall.SetNonblock(fdi, true); err == nil {
 			f.nonblock = true
 		}
 	}
 
+	//当被GC清理时，调用 (*file).close 方法进行关闭
 	runtime.SetFinalizer(f.file, (*file).close)
 	return f
 }

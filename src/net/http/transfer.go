@@ -520,18 +520,21 @@ func readTransfer(msg any, r *bufio.Reader) (err error) {
 		return err
 	}
 
+	//获取content-length的值
 	realLength, err := fixLength(isResponse, t.StatusCode, t.RequestMethod, t.Header, t.Chunked)
 	if err != nil {
 		return err
 	}
+
+	//如果msg是Response，且请求method是HEAD，则从响应头Content-Length获取响应体长度
 	if isResponse && t.RequestMethod == "HEAD" {
 		if n, err := parseContentLength(t.Header.get("Content-Length")); err != nil {
 			return err
 		} else {
-			t.ContentLength = n
+			t.ContentLength = n //响应体长度
 		}
 	} else {
-		t.ContentLength = realLength
+		t.ContentLength = realLength //
 	}
 
 	// Trailer

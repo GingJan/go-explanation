@@ -30,7 +30,7 @@ func runtime_isPollServerDescriptor(fd uintptr) bool
 
 //是底层系统fd的封装，负责fd和epoll的交互
 type pollDesc struct {
-	runtimeCtx uintptr //指向runtime.pollDesc，而runtime.pollDesc则是指向底层系统fd的封装，当为0时说明该poll.pollDesc是不可pollable的
+	runtimeCtx uintptr //指向 runtime.pollDesc，而 runtime.pollDesc 则是指向底层系统fd的封装，当为0时说明该 poll.pollDesc 是不可pollable的
 }
 
 var serverInit sync.Once

@@ -337,9 +337,9 @@ func (c *child) cleanUp() {
 // If l is nil, Serve accepts connections from os.Stdin.
 // If handler is nil, http.DefaultServeMux is used.
 func Serve(l net.Listener, handler http.Handler) error {
-	if l == nil {
+	if l == nil { //如果没有传入已有的l实例
 		var err error
-		l, err = net.FileListener(os.Stdin)
+		l, err = net.FileListener(os.Stdin) //那么就以标准输入作为fd创建一个l实例
 		if err != nil {
 			return err
 		}
@@ -349,7 +349,7 @@ func Serve(l net.Listener, handler http.Handler) error {
 		handler = http.DefaultServeMux
 	}
 	for {
-		rw, err := l.Accept()
+		rw, err := l.Accept() //监听该fd（listen-fd）上的accept事件，rw是连接fd
 		if err != nil {
 			return err
 		}

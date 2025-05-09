@@ -171,18 +171,21 @@ func gcinit() {
 // just before we're about to start letting user code run.
 // It kicks off the background sweeper goroutine, the background
 // scavenger goroutine, and enables GC.
+// 在大部分的初始化工作完成后，同时也要在开始执行用户代码前 调用本函数
+// 本函数启动了后台的sweeper协程，后台scavenger协程，启动 GC
 func gcenable() {
 	// Kick off sweeping and scavenging.
 	c := make(chan int, 2)
-	go bgsweep(c)
-	go bgscavenge(c)
+	go bgsweep(c)    //后台sweeper协程
+	go bgscavenge(c) //后台scavenger协程
 	<-c
 	<-c
-	memstats.enablegc = true // now that runtime is initialized, GC is okay
+	memstats.enablegc = true // gc就绪，随时可以执行gc了
 }
 
 // Garbage collector phase.
 // Indicates to write barrier and synchronization task to perform.
+// 当前gc所处阶段
 var gcphase uint32
 
 // The compiler knows about this variable.
@@ -190,9 +193,9 @@ var gcphase uint32
 // If you change the first four bytes, you must also change the write
 // barrier insertion code.
 var writeBarrier struct {
-	enabled bool    // compiler emits a check of this before calling write barrier
+	enabled bool    // 编译器在插入 write barrier（写屏障）代码前，会先插入一段检查逻辑，判断是否真的需要启用写屏障。当为true时，编译器会先插入一段检查逻辑
 	pad     [3]byte // compiler uses 32-bit load for "enabled" field
-	needed  bool    // whether we need a write barrier for current GC phase
+	needed  bool    // 当前gc阶段是否需要开启写屏障
 	cgo     bool    // whether we need a write barrier for a cgo check
 	alignme uint64  // guarantee alignment so that compiler can use a 32 or 64-bit load
 }
@@ -204,15 +207,15 @@ var gcBlackenEnabled uint32
 
 const (
 	//gc阶段
-	_GCoff             = iota // GC not running; sweeping in background, write barrier disabled
-	_GCmark                   // GC marking roots and workbufs: allocate black, write barrier ENABLED
-	_GCmarktermination        // GC mark termination: allocate black, P's help GC, write barrier ENABLED
+	_GCoff             = iota // 当前没有执行GC：后台正在进行清理，写屏障未开启
+	_GCmark                   // 当前正在进行根对象和workbufs标记：标黑，写屏障已开启
+	_GCmarktermination        // GC标记终止阶段：此阶段新分配的对象将被视为黑色，此时 所有的P会协助完成GC的剩余工作，包括标记剩余的对象或完成终止逻辑，保证 GC 尽快完成，减少对用户程序的暂停影响。写屏障依旧处于开启。
 )
 
 //go:nosplit
 func setGCPhase(x uint32) {
 	atomic.Store(&gcphase, x)
-	writeBarrier.needed = gcphase == _GCmark || gcphase == _GCmarktermination
+	writeBarrier.needed = gcphase == _GCmark || gcphase == _GCmarktermination //当gc处于标记和标记终止阶段，都需要开启写屏障
 	writeBarrier.enabled = writeBarrier.needed || writeBarrier.cgo
 }
 
@@ -279,6 +282,7 @@ func pollFractionalWorkerExit() bool {
 	return float64(selfTime)/float64(delta) > 1.2*gcController.fractionalUtilizationGoal
 }
 
+// gc任务的结构体
 var work struct {
 	full  lfstack          // lock-free list of full blocks workbuf
 	empty lfstack          // lock-free list of empty blocks workbuf
@@ -333,6 +337,7 @@ var work struct {
 	// before the beginning of concurrent marking. The backing
 	// store of this must not be modified because it might be
 	// shared with allgs.
+	// 存放着所有 在gc并发标记阶段前就已经存在的g
 	stackRoots []*g
 
 	// Each type of GC state transition is protected by a lock.
@@ -362,6 +367,7 @@ var work struct {
 
 	// userForced indicates the current GC cycle was forced by an
 	// explicit user call.
+	// 当前gc是否由用户显示调用主动触发
 	userForced bool
 
 	// totaltime is the CPU nanoseconds spent in GC since the
@@ -518,9 +524,9 @@ const (
 // A gcTrigger is a predicate for starting a GC cycle. Specifically,
 // it is an exit condition for the _GCoff phase.
 type gcTrigger struct {
-	kind gcTriggerKind
-	now  int64  // gcTriggerTime: current time
-	n    uint32 // gcTriggerCycle: cycle number to start
+	kind gcTriggerKind //gc触发类型，内存使用率触发，定时触发，用户主动触发
+	now  int64         // gcTriggerTime: current time
+	n    uint32        // gcTriggerCycle: cycle number to start
 }
 
 // gc被触发的原因
@@ -549,7 +555,7 @@ const (
 // test reports whether the trigger condition is satisfied, meaning
 // that the exit condition for the _GCoff phase has been met. The exit
 // condition should be tested when allocating.
-// 检查是否满足垃圾收集条件
+// 检查是否满足垃圾收集条件，以便开始进行gc
 func (t gcTrigger) test() bool {
 	if !memstats.enablegc || panicking != 0 || gcphase != _GCoff {
 		return false
@@ -910,6 +916,7 @@ top:
 	nextTriggerRatio := gcController.endCycle(now, int(gomaxprocs), work.userForced)
 
 	// Perform mark termination. This will restart the world.
+	// 执行 标记终止阶段，该阶段会结束stw，恢复运行
 	gcMarkTermination(nextTriggerRatio)
 }
 
@@ -1183,7 +1190,7 @@ type gcBgMarkWorkerNode struct {
 }
 
 func gcBgMarkWorker() {
-	gp := getg() //是用户协程gp
+	gp := getg() //用户协程gp
 
 	// We pass node to a gopark unlock function, so it can't be on
 	// the stack (see gopark). Prevent deadlock from recursively

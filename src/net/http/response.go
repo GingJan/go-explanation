@@ -151,26 +151,29 @@ func (r *Response) Location() (*url.URL, error) {
 // Clients must call resp.Body.Close when finished reading resp.Body.
 // After that call, clients can inspect resp.Trailer to find key/value
 // pairs included in the response trailer.
+// 从 r bufio.Reader 解析 HTTP 响应并返回 *http.Response。
+// 使用场景：处理裸 TCP 连接上的 HTTP 响应。需要手动解析 HTTP 响应数据。
 func ReadResponse(r *bufio.Reader, req *Request) (*Response, error) {
-	tp := textproto.NewReader(r)
+	tp := textproto.NewReader(r) //文本协议reader
 	resp := &Response{
 		Request: req,
 	}
 
 	// Parse the first line of the response.
-	line, err := tp.ReadLine()
+	line, err := tp.ReadLine() //读取&解析第一行文本
 	if err != nil {
 		if err == io.EOF {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, err
 	}
+
 	proto, status, ok := strings.Cut(line, " ")
 	if !ok {
 		return nil, badStringError("malformed HTTP response", line)
 	}
-	resp.Proto = proto
-	resp.Status = strings.TrimLeft(status, " ")
+	resp.Proto = proto                          //协议
+	resp.Status = strings.TrimLeft(status, " ") //响应状态码
 
 	statusCode, _, _ := strings.Cut(resp.Status, " ")
 	if len(statusCode) != 3 {
@@ -184,7 +187,7 @@ func ReadResponse(r *bufio.Reader, req *Request) (*Response, error) {
 		return nil, badStringError("malformed HTTP version", resp.Proto)
 	}
 
-	// Parse the response headers.
+	// 读取响应头的数据并解析
 	mimeHeader, err := tp.ReadMIMEHeader()
 	if err != nil {
 		if err == io.EOF {

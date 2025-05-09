@@ -26,24 +26,28 @@ type ifaceWords struct {
 // Load returns the value set by the most recent Store.
 // It returns nil if there has been no call to Store for this Value.
 func (v *Value) Load() (val any) {
-	vp := (*ifaceWords)(unsafe.Pointer(v))
+	vp := (*ifaceWords)(unsafe.Pointer(v)) //目的：把v转为ifaceWords，以便后续的操作，（v的.v是any）
+
 	typ := LoadPointer(&vp.typ)
+
+	//类型为nil或处于中间态，说明还没首次赋值或者正在进行首次赋值
 	if typ == nil || typ == unsafe.Pointer(&firstStoreInProgress) {
-		// First store not yet completed.
+		// 首次赋值未完成
 		return nil
 	}
+
 	data := LoadPointer(&vp.data)
+
+	//把v的类型和值赋给val返回
 	vlp := (*ifaceWords)(unsafe.Pointer(&val))
 	vlp.typ = typ
 	vlp.data = data
 	return
 }
 
-var firstStoreInProgress byte
+var firstStoreInProgress byte //代表正在进行首次存储中的中间态
 
-// Store sets the value of the Value to x.
-// All calls to Store for a given Value must use values of the same concrete type.
-// Store of an inconsistent type panics, as does Store(nil).
+// 原子赋值给v，首次赋值会涉及到类型设置，因此有个中间态需等待
 func (v *Value) Store(val any) {
 	if val == nil {
 		panic("sync/atomic: store of nil value into Value")
@@ -53,30 +57,33 @@ func (v *Value) Store(val any) {
 	for {
 		typ := LoadPointer(&vp.typ)
 		if typ == nil {
-			// Attempt to start first store.
-			// Disable preemption so that other goroutines can use
-			// active spin wait to wait for completion.
+			// 开始第一次赋值操作
+			// 禁止调度器对当前 goroutine 的抢占，使得它在执行当前逻辑的时候不被打断，以便可以尽快地完成工作，因为别人一直在等待它。
+			// 另一方面，在禁止抢占期间，GC 线程也无法被启用，这样可以防止 GC 线程看到一个莫名其妙的指向firstStoreInProgress的类型（这是赋值过程中的中间状态）
 			runtime_procPin()
-			if !CompareAndSwapPointer(&vp.typ, nil, unsafe.Pointer(&firstStoreInProgress)) {
+			if !CompareAndSwapPointer(&vp.typ, nil, unsafe.Pointer(&firstStoreInProgress)) { //先设为中间态「firstStoreInProgress」
 				runtime_procUnpin()
 				continue
 			}
-			// Complete first store.
+			// 因为首次赋值涉及到两个字段的操作，一个是类型typ，一个是数据data，需要两次赋值操作，所以需要中间态过度
+			// 完成Value的首次赋值（首次赋值涉及到类型设置）
 			StorePointer(&vp.data, vlp.data)
 			StorePointer(&vp.typ, vlp.typ)
-			runtime_procUnpin()
+			runtime_procUnpin() //恢复抢占
 			return
 		}
-		if typ == unsafe.Pointer(&firstStoreInProgress) {
-			// First store in progress. Wait.
-			// Since we disable preemption around the first store,
-			// we can wait with active spinning.
+		if typ == unsafe.Pointer(&firstStoreInProgress) { //如果首次存储还在进行中，则返回继续循环等待
+			// 因为在Value首次赋值时关闭了抢占，所以我们可以通过自旋方式等待首次赋值完成后，继续操作
 			continue
 		}
 		// First store completed. Check type and overwrite data.
+
+		// 新值类型和旧值类型不同
 		if typ != vlp.typ {
 			panic("sync/atomic: store of inconsistently typed value into Value")
 		}
+
+		// 更新值
 		StorePointer(&vp.data, vlp.data)
 		return
 	}
@@ -95,19 +102,25 @@ func (v *Value) Swap(new any) (old any) {
 	np := (*ifaceWords)(unsafe.Pointer(&new))
 	for {
 		typ := LoadPointer(&vp.typ)
-		if typ == nil {
-			// Attempt to start first store.
-			// Disable preemption so that other goroutines can use
-			// active spin wait to wait for completion; and so that
-			// GC does not see the fake type accidentally.
+		if typ == nil { //v还没首次赋值
+			// 则先进行首次赋值
+			// 关闭本协程的可抢占标识，其他协程可自旋等待本协程进行的首次赋值完成
+			// 此时GC就不会遇到异常情况
+
+			//关闭抢占
 			runtime_procPin()
+
+			//更新状态为中间态
 			if !CompareAndSwapPointer(&vp.typ, nil, unsafe.Pointer(&firstStoreInProgress)) {
 				runtime_procUnpin()
 				continue
 			}
-			// Complete first store.
+
+			// 进行首次赋值
 			StorePointer(&vp.data, np.data)
 			StorePointer(&vp.typ, np.typ)
+
+			// 赋值完成，恢复抢占
 			runtime_procUnpin()
 			return nil
 		}
@@ -190,5 +203,5 @@ func (v *Value) CompareAndSwap(old, new any) (swapped bool) {
 }
 
 // Disable/enable preemption, implemented in runtime.
-func runtime_procPin()
+func runtime_procPin() //禁用协程抢占，在编译时，会替换成 runtime.procPin
 func runtime_procUnpin()

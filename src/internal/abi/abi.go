@@ -123,4 +123,6 @@ func FuncPCABI0(f any) uintptr
 // the behavior is undefined.
 //
 // Implemented as a compile intrinsic.
+// 该函数返回函数f的入口PC，如果f是函数的直接引用地址，g必定被定义为ABIInternal
+// 否则f就是编译时的错误。如果f不是已定义函数的引用，那么就把f当作是一个变量为函数类型的值
 func FuncPCABIInternal(f any) uintptr

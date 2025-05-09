@@ -23,11 +23,12 @@ type netFD struct {
 	family      int
 	sotype      int    //socket type 有 syscall.SOCK_STREAM、syscall.SOCK_DGRAM、syscall.SOCK_RAW、syscall.SOCK_RDM、syscall.SOCK_SEQPACKET
 	isConnected bool   // 握手是否完成 handshake completed or use of association with peer
-	net         string // "file" 或 tcp
+	net         string // udp 或 tcp
 	laddr       Addr   //本端地址
 	raddr       Addr   //对端地址
 }
 
+//设置网络fd（socket）上的本地地址和远程对端地址
 func (fd *netFD) setAddr(laddr, raddr Addr) {
 	fd.laddr = laddr
 	fd.raddr = raddr

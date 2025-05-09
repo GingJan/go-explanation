@@ -52,8 +52,9 @@ type hchan struct {
 	lock mutex
 }
 
+//等待队列，所有等待读/写的g实例都挂在这里
 type waitq struct {
-	first *sudog
+	first *sudog //指向等待队列的第一个g
 	last  *sudog
 }
 

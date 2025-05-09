@@ -18,26 +18,27 @@ type Work struct {
 	running int       // total number of runners
 
 	mu      sync.Mutex
-	added   map[any]bool // items added to set
-	todo    []any        // items yet to be run
-	wait    sync.Cond    // wait when todo is empty
-	waiting int          // number of runners waiting for todo
+	added   map[any]bool // 全量任务集
+	todo    []any        // 将要被执行任务
+	wait    sync.Cond    // 当 tod'o 为空时，则阻塞等待在此，等到 tod'o 有任务时才返回
+	waiting int          // 等待tod'o的worker数量
 }
 
+//初始化任务池
 func (w *Work) init() {
 	if w.added == nil {
 		w.added = make(map[any]bool)
 	}
 }
 
-// Add adds item to the work set, if it hasn't already been added.
+// 添加任务到任务池（会去重）
 func (w *Work) Add(item any) {
 	w.mu.Lock()
 	w.init()
 	if !w.added[item] {
 		w.added[item] = true
 		w.todo = append(w.todo, item)
-		if w.waiting > 0 {
+		if w.waiting > 0 { //如果有worker在等待任务了，则唤醒该worker了（因为有新任务来了）
 			w.wait.Signal()
 		}
 	}
@@ -63,6 +64,7 @@ func (w *Work) Do(n int, f func(item any)) {
 	w.f = f
 	w.wait.L = &w.mu
 
+	//开启n个协程处理任务
 	for i := 0; i < n-1; i++ {
 		go w.runner()
 	}
@@ -92,13 +94,13 @@ func (w *Work) runner() {
 		// to eliminate pathological contention
 		// in case items added at about the same time
 		// are most likely to contend.
-		i := rand.Intn(len(w.todo))
+		i := rand.Intn(len(w.todo)) //从todo池里随机取一个任务处理
 		item := w.todo[i]
 		w.todo[i] = w.todo[len(w.todo)-1]
 		w.todo = w.todo[:len(w.todo)-1]
 		w.mu.Unlock()
 
-		w.f(item)
+		w.f(item) //调用任务处理函数
 	}
 }
 

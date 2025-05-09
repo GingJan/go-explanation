@@ -186,7 +186,7 @@ retry:
 		if mode != 0 {
 			pd := (*pollDesc)(unsafe.Pointer(ev.udata))
 			pd.setEventErr(ev.flags == _EV_ERROR)
-			netpollready(&toRun, pd, mode)
+			netpollready(&toRun, pd, mode) //epoll上有事件，也即io就绪，唤醒对应的pd（也即pd上绑定的g）
 		}
 	}
 	return toRun

@@ -78,9 +78,9 @@ func poll_runtime_Semrelease(addr *uint32) {
 
 func readyWithTime(s *sudog, traceskip int) {
 	if s.releasetime != 0 {
-		s.releasetime = cputicks()
+		s.releasetime = cputicks() //当前cpu时间
 	}
-	goready(s.g, traceskip)
+	goready(s.g, traceskip) //把s.g对应的用户协程恢复运行
 }
 
 type semaProfileFlags int
@@ -449,7 +449,7 @@ func (root *semaRoot) rotateRight(y *sudog) {
 type notifyList struct {
 	// wait is the ticket number of the next waiter. It is atomically
 	// incremented outside the lock.
-	wait uint32
+	wait uint32 //当前正在等待的协程个数
 
 	// notify is the ticket number of the next waiter to be notified. It can
 	// be read outside the lock, but is only written to with lock held.
@@ -458,7 +458,7 @@ type notifyList struct {
 	// handled as long as their "unwrapped" difference is bounded by 2^31.
 	// For this not to be the case, we'd need to have 2^31+ goroutines
 	// blocked on the same condvar, which is currently not possible.
-	notify uint32
+	notify uint32 //下一个要被唤醒的ticket号码
 
 	// List of parked waiters.
 	lock mutex
@@ -472,9 +472,7 @@ func less(a, b uint32) bool {
 	return int32(a-b) < 0
 }
 
-// notifyListAdd adds the caller to a notify list such that it can receive
-// notifications. The caller must eventually call notifyListWait to wait for
-// such a notification, passing the returned ticket number.
+// 把调用方协程添加到通知队列里，调用方需通过调用 notifyListWait 并传入本函数返回的ticket号码来等待通知
 //go:linkname notifyListAdd sync.runtime_notifyListAdd
 func notifyListAdd(l *notifyList) uint32 {
 	// This may be called concurrently, for example, when called from
@@ -482,8 +480,7 @@ func notifyListAdd(l *notifyList) uint32 {
 	return atomic.Xadd(&l.wait, 1) - 1
 }
 
-// notifyListWait waits for a notification. If one has been sent since
-// notifyListAdd was called, it returns immediately. Otherwise, it blocks.
+// 等待通知. 如果在调用notifyListAdd后，就已有消息通知了，那么在调用本函数时就会立即返回，否则阻塞在此
 //go:linkname notifyListWait sync.runtime_notifyListWait
 func notifyListWait(l *notifyList, t uint32) {
 	lockWithRank(&l.lock, lockRankNotifyList)
@@ -499,22 +496,29 @@ func notifyListWait(l *notifyList, t uint32) {
 	s.g = getg()
 	s.ticket = t
 	s.releasetime = 0
+
 	t0 := int64(0)
 	if blockprofilerate > 0 {
 		t0 = cputicks()
 		s.releasetime = -1
 	}
+
+	//把s加入到l的等待队列里（append）
 	if l.tail == nil {
 		l.head = s
 	} else {
 		l.tail.next = s
 	}
 	l.tail = s
+
+	//把当前用户协程挂起，（先挂起协程，再解锁 l.lock，）
 	goparkunlock(&l.lock, waitReasonSyncCondWait, traceEvGoBlockCond, 3)
+
+	//当跑到这里时，意味着当前用户协程g已经恢复运行了
 	if t0 != 0 {
 		blockevent(s.releasetime-t0, 2)
 	}
-	releaseSudog(s)
+	releaseSudog(s) //移除sudog（该sudog会回收到sched的全局空闲池里复用）
 }
 
 // notifyListNotifyAll notifies all entries in the list.
@@ -540,8 +544,7 @@ func notifyListNotifyAll(l *notifyList) {
 	atomic.Store(&l.notify, atomic.Load(&l.wait))
 	unlock(&l.lock)
 
-	// Go through the local list and ready all waiters.
-	for s != nil {
+	for s != nil { //唤醒全部阻塞等待信号量的协程
 		next := s.next
 		s.next = nil
 		readyWithTime(s, 4)
@@ -554,20 +557,21 @@ func notifyListNotifyAll(l *notifyList) {
 func notifyListNotifyOne(l *notifyList) {
 	// Fast-path: if there are no new waiters since the last notification
 	// we don't need to acquire the lock at all.
+	// 快路径，当前没有在等待信号的协程，那么不需要获取锁了（以及后续逻辑），直接返回即可
 	if atomic.Load(&l.wait) == atomic.Load(&l.notify) {
 		return
 	}
 
-	lockWithRank(&l.lock, lockRankNotifyList)
+	lockWithRank(&l.lock, lockRankNotifyList) //获取锁
 
-	// Re-check under the lock if we need to do anything.
+	//拿到锁后，再次检查当前是否没有在等待信号的协程
 	t := l.notify
 	if t == atomic.Load(&l.wait) {
 		unlock(&l.lock)
 		return
 	}
 
-	// Update the next notify ticket number.
+	// 更新下一个要唤醒的ticket号码（l.notify）
 	atomic.Store(&l.notify, t+1)
 
 	// Try to find the g that needs to be notified.
@@ -591,12 +595,15 @@ func notifyListNotifyOne(l *notifyList) {
 			} else {
 				l.head = n
 			}
+
+			//等待队列里，已无item了
 			if n == nil {
 				l.tail = p
 			}
+
 			unlock(&l.lock)
 			s.next = nil
-			readyWithTime(s, 4)
+			readyWithTime(s, 4) //唤醒该s.ticket下对应的协程
 			return
 		}
 	}

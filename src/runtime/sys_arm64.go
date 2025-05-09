@@ -14,5 +14,5 @@ func gostartcall(buf *gobuf, fn, ctxt unsafe.Pointer) {
 	}
 	buf.lr = buf.pc
 	buf.pc = uintptr(fn)
-	buf.ctxt = ctxt
+	buf.ctxt = ctxt //上下文
 }

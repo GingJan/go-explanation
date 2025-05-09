@@ -70,7 +70,7 @@ const (
 // useless), and even if it is, the application has to be ready for
 // spurious SIGURG. SIGIO wouldn't be a bad choice either, but is more
 // likely to be used for real.
-const sigPreempt = _SIGURG//21
+const sigPreempt = _SIGURG //21
 
 // Stores the signal handlers registered before Go installed its own.
 // These signal handlers will be invoked in cases where Go doesn't want to
@@ -364,8 +364,9 @@ const preemptMSupported = true
 // safe-point, it will preempt the goroutine. It always atomically
 // increments mp.preemptGen after handling a preemption request.
 // 发送一个抢占请求给m，该请求可能被异步处理，也可能和其他发送给m的请求合并一起处理
-// 当请求被接收后，如果正在执行的G或P标记有「抢占」标识且协程处于异步安全点，则会把该协程g抢占走（该协程就会被暂停了）
+// 当请求被接收后，如果正在执行的G或P标记有「可被抢占」标识且协程处于异步安全点，则会把该协程g的时间片抢走（该协程就会被挂起）
 // 处理一个抢占信号后，原子递增mp.preemptGen
+// 通过向mp所在的线程发送 _SIGURG 信号挂起该线程的运行，以便让出时间片给其他线程（上的g运行）
 func preemptM(mp *m) {
 	// On Darwin, don't try to preempt threads during exec.
 	// Issue #41702.
@@ -373,7 +374,7 @@ func preemptM(mp *m) {
 		execLock.rlock()
 	}
 
-	if atomic.Cas(&mp.signalPending, 0, 1) {//只发送一次信号给m对应的系统线程
+	if atomic.Cas(&mp.signalPending, 0, 1) { //只发送一次抢占信号给当前m（mp）对应的系统线程
 		if GOOS == "darwin" || GOOS == "ios" {
 			atomic.Xadd(&pendingPreemptSignals, 1)
 		}
@@ -383,7 +384,7 @@ func preemptM(mp *m) {
 		// live-lock problem. Apparently this could happen on darwin. See
 		// issue #37741.
 		// Only send a signal if there isn't already one pending.
-		signalM(mp, sigPreempt)//停止m当前对应的系统线程的运行
+		signalM(mp, sigPreempt) //停止m当前对应的系统线程的运行（以让出当前正在运行的协程 的CPU时间片）
 	}
 
 	if GOOS == "darwin" || GOOS == "ios" {
@@ -603,7 +604,8 @@ var testSigusr1 func(gp *g) bool
 // The garbage collector may have stopped the world, so write barriers
 // are not allowed.
 //
-// sighandler 当触发信号时，该函数会被调用，全局g
+// sighandler 当触发信号时，该函数会被调用，全局g会被设给gsignal协程，然后在对应的信号栈里运行
+// 当信号被触发时，入参g就是全局g实例，入参sig，info，ctxt则来自系统信号handler，
 //go:nowritebarrierrec
 func sighandler(sig uint32, info *siginfo, ctxt unsafe.Pointer, gp *g) {
 	_g_ := getg()

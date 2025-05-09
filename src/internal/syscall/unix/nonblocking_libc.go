@@ -11,6 +11,7 @@ import (
 	_ "unsafe" // for go:linkname
 )
 
+//判断fd是否非阻塞模式的
 func IsNonblock(fd int) (nonblocking bool, err error) {
 	flag, e1 := fcntl(fd, syscall.F_GETFL, 0)
 	if e1 != nil {

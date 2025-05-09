@@ -69,7 +69,7 @@ const pollBlockSize = 4 * 1024
 // No heap pointers.
 //
 //go:notinheap
-// 网络poller描述符。是Go runtime 用来管理网络 I/O 操作（如 epoll 或 kqueue）的一个结构体
+// 网络poller描述符。是 Go runtime 用来管理网络I/O操作（网络轮询）（如 epoll 或 kqueue）的一个结构体
 type pollDesc struct {
 	link *pollDesc // in pollcache, protected by pollcache.lock
 	fd   uintptr   // constant for pollDesc usage lifetime
@@ -93,7 +93,7 @@ type pollDesc struct {
 
 	// rg, wg are accessed atomically and hold g pointers.
 	// (Using atomic.Uintptr here is similar to using guintptr elsewhere.)
-	rg atomic.Uintptr // pdReady, pdWait, G waiting for read or nil，取值可能是 pdReady 或 pdWait 或 等待可读的G（的指针） 或 nil/0
+	rg atomic.Uintptr // pdReady, pdWait, G waiting for read or nil，取值可能是 pdReady 或 pdWait 或 等待可读（阻塞在读上）的G（的指针） 或 nil/0
 	wg atomic.Uintptr // pdReady, pdWait, G waiting for write or nil，相关的写操作的等待状态，有多个值：nil/0、pdReady、pdWait或等待写的G（的指针）
 
 	lock    mutex     // 保护下面字段的安全变动
@@ -123,8 +123,8 @@ const (
 
 func (i pollInfo) closing() bool              { return i&pollClosing != 0 }
 func (i pollInfo) eventErr() bool             { return i&pollEventErr != 0 }
-func (i pollInfo) expiredReadDeadline() bool  { return i&pollExpiredReadDeadline != 0 }
-func (i pollInfo) expiredWriteDeadline() bool { return i&pollExpiredWriteDeadline != 0 }
+func (i pollInfo) expiredReadDeadline() bool  { return i&pollExpiredReadDeadline != 0 }  //是否读等待超时
+func (i pollInfo) expiredWriteDeadline() bool { return i&pollExpiredWriteDeadline != 0 } //是否写等待超时
 
 // info returns the pollInfo corresponding to pd.
 func (pd *pollDesc) info() pollInfo {
@@ -180,7 +180,7 @@ var (
 	netpollInited   uint32 //netpoll是否初始化
 
 	pollcache      pollCache //poll复用池
-	netpollWaiters uint32    //阻塞等待netpoll上读写事件的协程的数量
+	netpollWaiters uint32    //等待netpoll上读写事件的协程的数量
 )
 
 //go:linkname poll_runtime_pollServerInit internal/poll.runtime_pollServerInit
@@ -427,8 +427,8 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 	pd.wseq++
 	var rg, wg *g
 	pd.publishInfo()
-	rg = netpollunblock(pd, 'r', false) //解除在该pd上等待read的G的阻塞，并返回该G
-	wg = netpollunblock(pd, 'w', false) //解除在该pd上等待write的G的阻塞，并返回该G
+	rg = netpollunblock(pd, 'r', false) //把pd.rg设为信号量pdReady，同时把pd里绑定的g（实际上就是存放在.rg字段里）返回
+	wg = netpollunblock(pd, 'w', false) //把pd.wg设为信号量pdReady，同时把pd里绑定的g（实际上就是存放在.wg字段里）返回
 	if pd.rt.f != nil {
 		deltimer(&pd.rt) //异步删除该pd上的超时计时器
 		pd.rt.f = nil
@@ -439,10 +439,10 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 	}
 	unlock(&pd.lock)
 	if rg != nil {
-		netpollgoready(rg, 3) //poll_runtime_pollUnblock调用，把被阻塞的g唤醒进入runnable态
+		netpollgoready(rg, 3) //poll_runtime_pollUnblock调用，把被阻塞的g唤醒进入runnable态，实质上是goready的封装
 	}
 	if wg != nil {
-		netpollgoready(wg, 3) //poll_runtime_pollUnblock调用，把被阻塞的g唤醒进入runnable态
+		netpollgoready(wg, 3) //poll_runtime_pollUnblock调用，把被阻塞的g唤醒进入runnable态，实质上是goready的封装
 	}
 }
 
@@ -456,19 +456,20 @@ func poll_runtime_pollUnblock(pd *pollDesc) {
 //go:nowritebarrier
 // netpollready函数被对应系统平台（如Linux）的 netpoll 函数调用
 // 实现的行为是把pd下关联的G解除阻塞等待，并把该G写入到toRun里
+// 当epoll上有事件就绪时，就会调用本函数把事件对应的pd调起
 func netpollready(toRun *gList, pd *pollDesc, mode int32) {
 	var rg, wg *g
 	if mode == 'r' || mode == 'r'+'w' {
-		rg = netpollunblock(pd, 'r', true)
+		rg = netpollunblock(pd, 'r', true) //唤起被netpoll r阻塞的g
 	}
 	if mode == 'w' || mode == 'r'+'w' {
-		wg = netpollunblock(pd, 'w', true) //在该网络IO上等待的g
+		wg = netpollunblock(pd, 'w', true) //唤起被netpoll w阻塞的g
 	}
 	if rg != nil {
-		toRun.push(rg)
+		toRun.push(rg) //把所有被唤起的g入队，等待后续放入不同队列里恢复执行
 	}
 	if wg != nil {
-		toRun.push(wg) //推到队列里等待处理
+		toRun.push(wg)
 	}
 }
 
@@ -477,12 +478,12 @@ func netpollcheckerr(pd *pollDesc, mode int32) int {
 	info := pd.info()
 	//判断fd是否已关闭
 	if info.closing() { //判断底层的poll是否关闭了
-		return pollErrClosing
+		return pollErrClosing //IO已关闭
 	}
 
 	//判断是否超时
 	if (mode == 'r' && info.expiredReadDeadline()) || (mode == 'w' && info.expiredWriteDeadline()) {
-		return pollErrTimeout
+		return pollErrTimeout //IO等待超时
 	}
 
 	// Report an event scanning error only on a read event.
@@ -498,6 +499,7 @@ func netpollcheckerr(pd *pollDesc, mode int32) int {
 }
 
 // gp是当前的用户协程，gpp则是等待网络IO读/写事件的用户协程
+// 返回true表示挂起gp，false表示暂不挂起gp了，gp可以继续运行
 func netpollblockcommit(gp *g, gpp unsafe.Pointer) bool {
 	r := atomic.Casuintptr((*uintptr)(gpp), pdWait, uintptr(unsafe.Pointer(gp))) //如果gpp为pdWait（已在等待网络IO事件了），则把gp赋给gpp
 	if r {
@@ -509,19 +511,19 @@ func netpollblockcommit(gp *g, gpp unsafe.Pointer) bool {
 	return r
 }
 
+// goready的封装
 // 把 阻塞在netpoll上等待可读的G（gp）的状态更新为runnable，也即该gp上监听的事件有回应了
 func netpollgoready(gp *g, traceskip int) {
-	atomic.Xadd(&netpollWaiters, -1)
-	goready(gp, traceskip+1) //更新goroutine状态，使得goroutine 进入runnable态
+	atomic.Xadd(&netpollWaiters, -1) //被netpoll阻塞的协程数量-1
+	goready(gp, traceskip+1)         //更新goroutine状态，使得goroutine 进入runnable态
 }
 
-// returns true if IO is ready, or false if timedout or closed
-// waitio - wait only for completed IO, ignore errors
 // Concurrent calls to netpollblock in the same mode are forbidden, as pollDesc
 // can hold only a single waiting goroutine for each mode.
 // 判断当前阻塞在读写事件上的用户协程是否可以恢复执行了
-// 如果IO就绪（例如数据已准备好进行读取或写入）则返回true，如果IO已超时或已关闭（例如读取或写入时连接被关闭）则返回false
-// waitio参数，waitio模式只关心 I/O 操作是否成功完成，而不关心操作过程中可能发生的错误。
+// 如果IO就绪（例如数据已准备好进行读取或写入）则返回true，如果IO超时或已关闭（例如读取或写入时连接被关闭）则返回false
+// mode参数，r或w
+// waitio参数，waitio=true表示阻塞等待，将当前g挂起
 // 禁止在同mode下并发调用netpollblock方法（多个同model的 G 不能同时调用该函数），因为同mode下一个 pollDesc 实例只能阻塞等待一个G，
 // 所以各mode下只能有一个G在调用 netpollblock，（比如mode=读）
 // 如果多个 G 并发调用 netpollblock，它们会争抢同一个 pollDesc，导致不一致的状态或竞争条件。
@@ -532,14 +534,16 @@ func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 	}
 
 	// set the gpp semaphore to pdWait
+	// 把 pd里的.rg或 .wg设为信号量 pdWait
 	for {
 		// Consume notification if already ready.
-		// 如果pd下的G已经就绪，则返回
+		// 如果pd的.rg或.wg的信号量为pdReady，说明pd上被阻塞的g（这里可能是调用accept而阻塞的g，也可能是调用read，write等阻塞的g）可以恢复执行了
 		if gpp.CompareAndSwap(pdReady, 0) {
+			//退出阻塞（或不需要把该g挂起了）
 			return true
 		}
 
-		// 如果是这种情况，则还未就绪，把pd下的G（gpp）设为等待
+		// 如果是这种情况，则说明pd下绑定的g所关注的事件还未就绪，把pd.rg或.wg信号量设设为等待
 		if gpp.CompareAndSwap(0, pdWait) {
 			break
 		}
@@ -558,15 +562,22 @@ func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 		//挂起协程，至此，当前G让出执行权
 		gopark(netpollblockcommit, unsafe.Pointer(gpp), waitReasonIOWait, traceEvGoBlockNet, 5)
 	}
+	//被其他协程唤醒，同时被其他协程把gpp设为了pdReady后，本协程才解除阻塞
+
+	//本协程恢复运行，此时本g可能是在其他p或m上运行了
 	// be careful to not lose concurrent pdReady notification
 	old := gpp.Swap(0)
 	if old > pdWait {
 		throw("runtime: corrupted polldesc")
 	}
-	return old == pdReady
+	return old == pdReady //也即pd绑定的g等待的事件就绪了，那么该g可以恢复继续运行了。实际上代码跑到这里，也就表示g已经恢复运行了
 }
 
 //解除pd下等待IO的G的阻塞（pd->IO->G三者关联），并返回该G
+//pd，被作为数据连同事件实例一同注册到epoll里，当底层epoll事件就绪，就会调用事件里的data获取pd，并传入到本函数
+//mode，r|w
+//ioread：io是否就绪了
+// 返回被io阻塞的g（该g从pd的.rg或.wg里获取）
 func netpollunblock(pd *pollDesc, mode int32, ioready bool) *g {
 	gpp := &pd.rg
 	if mode == 'w' {

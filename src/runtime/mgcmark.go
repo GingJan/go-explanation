@@ -164,7 +164,7 @@ var oneptrmask = [...]uint8{1}
 // 抢占必须得先禁用，因为本函数使用gcWork
 // 返回本操作产生的 GC work 积分数量，如果 flushBgCredit 为true，那么本操作产生的积分也会被刷到后台积分池background credit pool
 //go:nowritebarrier
-func markroot(gcw *gcWork, i uint32, flushBgCredit bool) int64 {
+func markroot(gcw *gcWork, i uint32, flushBgCredit bool) int64 { //GC标记跟节点
 	// Note: if you add a case here, please also update heapdump.go:dumproots.
 	var workDone int64
 	var workCounter *atomic.Int64
@@ -222,7 +222,7 @@ func markroot(gcw *gcWork, i uint32, flushBgCredit bool) int64 {
 			// worker or we're in mark termination.
 			userG := getg().m.curg
 			selfScan := gp == userG && readgstatus(userG) == _Grunning
-			if selfScan {
+			if selfScan { //如果当前用户协程是协助gc的协程
 				casgstatus(userG, _Grunning, _Gwaiting)
 				userG.waitreason = waitReasonGarbageCollectionScan
 			}
@@ -234,17 +234,19 @@ func markroot(gcw *gcWork, i uint32, flushBgCredit bool) int64 {
 			// we scan the stacks we can and ask running
 			// goroutines to scan themselves; and the
 			// second blocks.
-			stopped := suspendG(gp)
-			if stopped.dead {
+			stopped := suspendG(gp) //暂停gp
+			if stopped.dead {       //如果gp已不再使用，可直接返回不用扫描了
 				gp.gcscandone = true
 				return
 			}
 			if gp.gcscandone {
 				throw("g already scanned")
 			}
-			workDone += scanstack(gp, gcw)
-			gp.gcscandone = true
-			resumeG(stopped)
+
+			workDone += scanstack(gp, gcw) //扫描gp的栈
+			gp.gcscandone = true           //扫描完成
+
+			resumeG(stopped) //恢复被暂停的gp的运行
 
 			if selfScan {
 				casgstatus(userG, _Gwaiting, _Grunning)
@@ -721,6 +723,7 @@ func gcFlushBgCredit(scanWork int64) {
 //
 //go:nowritebarrier
 //go:systemstack
+// 扫描gp的栈
 func scanstack(gp *g, gcw *gcWork) int64 {
 	if readgstatus(gp)&_Gscan == 0 {
 		print("runtime:scanstack: gp=", gp, ", goid=", gp.goid, ", gp->atomicstatus=", hex(readgstatus(gp)), "\n")
@@ -1015,6 +1018,7 @@ const (
 // gcDrain will always return if there is a pending STW.
 //
 //go:nowritebarrier
+// gc流转
 // 本函数在g0栈执行，负责从gcw任务池中取出一个任务并执行
 // 参数 flags 是用于控制垃圾回收工作队列中任务的行为
 func gcDrain(gcw *gcWork, flags gcDrainFlags) {
@@ -1069,6 +1073,7 @@ func gcDrain(gcw *gcWork, flags gcDrainFlags) {
 			gcw.balance()
 		}
 
+		//从灰对象任务队列里取一个任务出来，进行标黑操作
 		b := gcw.tryGetFast()
 		if b == 0 {
 			b = gcw.tryGet()
@@ -1488,6 +1493,7 @@ func greyobject(obj, base, off uintptr, span *mspan, gcw *gcWork, objIndex uintp
 	// some benefit on platforms with inclusive shared caches.
 	sys.Prefetch(obj)
 	// Queue the obj for scanning.
+	// 把需要进一步扫描的obj放入任务队列里
 	if !gcw.putFast(obj) {
 		gcw.put(obj)
 	}

@@ -276,6 +276,7 @@ func (l *TCPListener) SyscallConn() (syscall.RawConn, error) {
 // AcceptTCP accepts the next incoming call and returns the new
 // connection.
 // 给外部调用，返回的是TCPConn结构体实例
+//负责处理listenFd的协程调用此方法，接受来自listenFd其上的新连接建立请求
 func (l *TCPListener) AcceptTCP() (*TCPConn, error) {
 	if !l.ok() {
 		return nil, syscall.EINVAL
@@ -290,6 +291,7 @@ func (l *TCPListener) AcceptTCP() (*TCPConn, error) {
 // Accept implements the Accept method in the Listener interface; it
 // waits for the next call and returns a generic Conn.
 // 给外部调用，返回的是Conn接口（更通用）
+//负责处理listenFd的协程调用此方法，接受来自listenFd其上的新连接建立请求
 func (l *TCPListener) Accept() (Conn, error) {
 	if !l.ok() {
 		return nil, syscall.EINVAL

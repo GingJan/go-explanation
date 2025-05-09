@@ -15,7 +15,8 @@ import (
 
 // FD is a file descriptor. The net and os packages use this type as a
 // field of a larger type representing a network connection or OS file.
-// FD 是底层fd的封装。net和os包使用本结构体来表示网络连接或系统文件（的抽象）
+// FD 是底层fd（Sysfd字段）的封装。net包和os包使用本结构体来表示网络连接或系统文件（的抽象），也即net包里的 netFD.file结构体 和os包里的 os.file结构体 把本结构体FD作为一个字段，封装多一层
+// 本实例负责从底层的系统fd里轮询获取数据（如果Sysfd是可轮询的话），若系统fd不可轮询，尝试获取数据失败后立即返回
 type FD struct {
 	// Lock sysfd and serialize access to Read and Write methods.
 	// sysfd锁，用于序列化访问 Read 和 Write 方法
@@ -24,14 +25,14 @@ type FD struct {
 	// 系统fd，不可篡改，只会在 Close 关闭时变为-1
 	Sysfd int
 
-	// I/O poller.
-	pd pollDesc //是 poll.pollDesc，poll.pollDesc 的 runtimeCtx 指向 runtime.pollDesc，runtime.pollDesc 再指向更底层的fd
+	// I/O poller. IO轮询器
+	pd pollDesc //是 poll.pollDesc，poll.pollDesc 的 runtimeCtx 指向 runtime.pollDesc，runtime.pollDesc 再指向更底层的系统fd的封装
 
 	// Writev cache.
 	// 用于Writev的缓冲空间
 	iovecs *[]syscall.Iovec
 
-	//当文件被关闭时，使用该信号量进行通知
+	//当底层的系统fd（Sysfd字段的值）被关闭时，使用该信号量进行通知
 	csema uint32
 
 	// 标记该FD实例是否阻塞模式。如果FD被设为阻塞模式，则该值为非0（即1）
@@ -48,28 +49,32 @@ type FD struct {
 	ZeroReadIsEOF bool
 
 	// Whether this is a file rather than a network socket.
-	// 是文件还是网络socket
+	// 是文件还是网络socket（fd）
 	isFile bool
 }
 
 // 初始化FD实例，在调用本方法前，FD.Sysfd 字段应该已存有值。本方法可以同一个FD实例上调用多次
-// net参数的值可以是net包里的network name（如tcp）或 file
+// net参数的值可以是net包里的network name（如tcp，udp）或 file
 // 如果底层fd是由runtime的netpoll管理（底层epoll监听），则pollable参数传入true
 func (fd *FD) Init(net string, pollable bool) error {
-	// We don't actually care about the various network types.
+	// 只需要知道是文件fd or 网络fd
 	if net == "file" {
 		fd.isFile = true
 	}
-	if !pollable { //非pollable，也即只能是阻塞模式
+	if !pollable { //不可pollable，也即只能是阻塞模式
 		fd.isBlocking = 1 //不可pollable，初始化时默认设置为阻塞模式
 		return nil
 	}
-	err := fd.pd.init(fd) //初始化底层runtime.pollDesc并创建&初始化epoll实例，然后把fd添加到底层epoll的监听队列里
+
+	//只有pollable可轮询的 fd 实例才能加入到epoll实例的监听队列里
+
+	//初始化底层 runtime.pollDesc 并创建&初始化epoll实例（如果是第一次请求），然后把fd添加到epoll实例的监听队列里
+	err := fd.pd.init(fd)
 	if err != nil {
 		// If we could not initialize the runtime poller,
 		// assume we are using blocking mode.
-		// 出现异常，无法初始化runtime.pollDesc，也即无法完成epoll实例的创建，所以先假设使用阻塞模式
-		fd.isBlocking = 1 //创建epoll实例时出现异常，先假设使用阻塞模式
+		// 出现异常，初始化 runtime.pollDesc失败或把本fd实例添加到epoll实例里失败，所以为了兜底，先使用阻塞模式
+		fd.isBlocking = 1
 	}
 	return err
 }
@@ -77,9 +82,7 @@ func (fd *FD) Init(net string, pollable bool) error {
 // 本方法的行为，从epoll里移除监听并关闭底层fd，当本FD实例不再有引用时（无调用方使用了）才能调用本方法
 // 当本FD实例的引用次数为0时，都会调用本方法进行关闭（这么做是为了节约资源考虑，不再使用了则能关闭就关闭）
 func (fd *FD) destroy() error {
-	// Poller may want to unregister fd in readiness notification mechanism,
-	// so this must be executed before CloseFunc.
-	// Poller要先删掉fd的注册，所以必须在 CloseFunc 前调用
+	// 调用轮询器close方法，先从epoll实例里移除fd的监听，然后才能关闭系统fd（fd.Sysfd），所以必须在 CloseFunc 前调用
 	fd.pd.close()
 
 	// We don't use ignoringEINTR here because POSIX does not define
@@ -131,7 +134,7 @@ func (fd *FD) Close() error {
 	return err
 }
 
-// SetBlocking 把FD设为阻塞模式
+// SetBlocking 把FD设为阻塞模式，并把Sysfd系统fd设置为非阻塞
 func (fd *FD) SetBlocking() error {
 	if err := fd.incref(); err != nil {
 		return err
@@ -228,6 +231,7 @@ func (fd *FD) ReadFrom(p []byte) (int, syscall.Sockaddr, error) {
 		return 0, nil, err
 	}
 	defer fd.readUnlock()
+
 	if err := fd.pd.prepareRead(fd.isFile); err != nil {
 		return 0, nil, err
 	}
@@ -238,8 +242,8 @@ func (fd *FD) ReadFrom(p []byte) (int, syscall.Sockaddr, error) {
 				continue
 			}
 			n = 0
-			if err == syscall.EAGAIN && fd.pd.pollable() { //暂无数据可读，则进行poll等待
-				if err = fd.pd.waitRead(fd.isFile); err == nil { //阻塞在此，g被挂起
+			if err == syscall.EAGAIN && fd.pd.pollable() { //暂无数据可读，则进行poll轮询等待
+				if err = fd.pd.waitRead(fd.isFile); err == nil { //阻塞在此，当前g被挂起
 					continue
 				}
 			}
@@ -622,7 +626,7 @@ func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 		return -1, nil, "", err
 	}
 	for {
-		newClientFd, rsa, errcall, err := accept(fd.Sysfd) //先尝试看下有无连接建立请求，s是新的client_fd
+		newClientFd, rsa, errcall, err := accept(fd.Sysfd) //先尝试看下有无连接建立请求
 		if err == nil {                                    //当有新连接时，走这里
 			return newClientFd, rsa, "", err
 		}
@@ -634,7 +638,7 @@ func (fd *FD) Accept() (int, syscall.Sockaddr, string, error) {
 
 		case syscall.EAGAIN:
 			//非阻塞模式，当 listen_fd 被设置为非阻塞（即套接字标记了 O_NONBLOCK），并且没有新连接可用时，accept 会返回 -1，并将 errno 设置为 EAGAIN（或 EWOULDBLOCK，这两个错误码在某些系统中是等效的）。
-			if fd.pd.pollable() { //本fd（listen_fd）是可poll的，也即使用了epoll
+			if fd.pd.pollable() { //本fd（这里的fd.pd是listen_fd）是可poll的，也即使用了epoll
 				//当没有新的连接请求时，则当前g进入gopark，被挂起，直到有事件唤醒
 				if err = fd.pd.waitRead(fd.isFile); err == nil { //调用Accept函数的g阻塞在这
 					//网络有新连接请求事件，此时本G被唤醒，从这里恢复执行，并继续执行后续逻辑，continue回到上面accept，获取到一个新连接
@@ -721,9 +725,10 @@ func (fd *FD) Fstat(s *syscall.Stat_t) error {
 var tryDupCloexec = int32(1)
 
 // DupCloseOnExec dups fd and marks it close-on-exec.
+// 把fd复制一个副本并返回，该副本的fd值和传入的fd值是不同的，但是都指向同一个文件
 func DupCloseOnExec(fd int) (int, string, error) {
 	if syscall.F_DUPFD_CLOEXEC != 0 && atomic.LoadInt32(&tryDupCloexec) == 1 {
-		r0, e1 := fcntl(fd, syscall.F_DUPFD_CLOEXEC, 0)
+		r0, e1 := fcntl(fd, syscall.F_DUPFD_CLOEXEC, 0) //r0（fd副本）的值 和 fd不一样，但是它们都指向同一个文件
 		if e1 == nil {
 			return r0, "", nil
 		}
@@ -754,6 +759,7 @@ func dupCloseOnExecOld(fd int) (int, string, error) {
 }
 
 // Dup duplicates the file descriptor.
+// 把fd.Sysfd 复制一个副本出来
 func (fd *FD) Dup() (int, string, error) {
 	if err := fd.incref(); err != nil {
 		return -1, "", err

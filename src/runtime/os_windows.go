@@ -1006,7 +1006,8 @@ func minit() {
 	// bound anyway.
 	base := mbi.allocationBase + 16<<10
 	// Sanity check the stack bounds.
-	g0 := getg()
+	// 检查栈边界
+	g0 := getg() //g0
 	if base > g0.stack.hi || g0.stack.hi-base > 64<<20 {
 		print("runtime: g0 stack [", hex(base), ",", hex(g0.stack.hi), ")\n")
 		throw("bad g0 stack")
@@ -1015,7 +1016,7 @@ func minit() {
 	g0.stackguard0 = g0.stack.lo + _StackGuard
 	g0.stackguard1 = g0.stackguard0
 	// Sanity check the SP.
-	stackcheck()
+	stackcheck() //检查SP是否在[g->stack.lo, g->stack.hi)范围内
 }
 
 // Called from dropm to undo the effect of an minit.
